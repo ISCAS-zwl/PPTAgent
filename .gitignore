@@ -44,3 +44,5 @@ dist-ssr
 *.sw?
 deeppresenter/deeppresenter/config.yaml
 deeppresenter/deeppresenter/mcp.json
+# Test temporary files
+.mcp_test_temp.json

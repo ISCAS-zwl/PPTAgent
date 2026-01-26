@@ -1,6 +1,6 @@
 # Partly copied from wonderwhy-er/DesktopCommanderMCP
 # ? global dependency
-FROM docker.1ms.run/library/node:lts-bullseye-slim
+FROM node:lts-bullseye-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 RUN sed -i 's|http://deb.debian.org/debian|http://mirrors.tuna.tsinghua.edu.cn/debian|g' /etc/apt/sources.list && \

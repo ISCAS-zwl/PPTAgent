@@ -20,17 +20,8 @@ from deeppresenter.agents.env import AgentEnv
 from deeppresenter.utils.config import GLOBAL_CONFIG
 
 
-# Fixtures directory
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
-
 # Output directory for test results (permanent storage)
 TEST_OUTPUT_DIR = Path(__file__).parent / "test_outputs"
-
-
-@pytest.fixture(scope="session")
-def fixtures_dir():
-    """Return the fixtures directory path."""
-    return FIXTURES_DIR
 
 
 @pytest.fixture(scope="session")
@@ -63,18 +54,42 @@ async def workspace(tmp_path, request):
 
 @pytest.fixture
 async def agent_env(workspace):
-    """Create an AgentEnv instance with sandbox connection."""
-    # Use test-specific MCP config that only includes desktop_commander
-    # We create a shallow copy and only modify mcp_config_file
-    test_config = GLOBAL_CONFIG.model_copy(deep=False)
-    test_config.mcp_config_file = str(Path(__file__).parent.parent / "deeppresenter" / "mcp_test.json")
+    """Create an AgentEnv instance with sandbox connection.
 
-    async with AgentEnv(workspace, test_config) as env:
-        # Verify desktop_commander tool is available
-        assert "execute_command" in env._tools_dict, (
-            "execute_command tool not available - sandbox may not be connected"
-        )
-        yield env
+    Reads from mcp.json but filters to only load desktop_commander for testing.
+    This avoids duplicating configuration while keeping tests focused on sandbox.
+    """
+    # Read the main MCP config
+    mcp_config_path = Path(__file__).parent.parent / "deeppresenter" / "mcp.json"
+    with open(mcp_config_path, encoding="utf-8") as f:
+        all_servers = json.load(f)
+
+    # Filter to only desktop_commander for testing
+    test_servers = [s for s in all_servers if s["name"] == "desktop_commander"]
+
+    if not test_servers:
+        raise ValueError("desktop_commander not found in mcp.json")
+
+    # Write filtered config to a temporary file
+    test_mcp_path = Path(__file__).parent / ".mcp_test_temp.json"
+    with open(test_mcp_path, "w", encoding="utf-8") as f:
+        json.dump(test_servers, f, indent=4)
+
+    try:
+        # Use filtered config
+        test_config = GLOBAL_CONFIG.model_copy(deep=False)
+        test_config.mcp_config_file = str(test_mcp_path)
+
+        async with AgentEnv(workspace, test_config) as env:
+            # Verify desktop_commander tool is available
+            assert "execute_command" in env._tools_dict, (
+                "execute_command tool not available - sandbox may not be connected"
+            )
+            yield env
+    finally:
+        # Clean up temporary file
+        if test_mcp_path.exists():
+            test_mcp_path.unlink()
 
 
 @pytest.fixture
