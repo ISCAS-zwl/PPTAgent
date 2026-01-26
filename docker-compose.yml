@@ -27,6 +27,12 @@ services:
       DEEPPRESENTER_HOST_WORKSPACE_BASE: ${PWD}/workspace
       DEEPPRESENTER_WORKSPACE_BASE: /opt/workspace
       DEEPPRESENTER_LOG_LEVEL: 0 # 0: debug, 10: info, 20: warning
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      no_proxy: ${no_proxy:-}
+      NO_PROXY: ${NO_PROXY:-}
     volumes:
       - ./workspace:/opt/workspace
       - ./deeppresenter:/usr/src/pptagent/deeppresenter

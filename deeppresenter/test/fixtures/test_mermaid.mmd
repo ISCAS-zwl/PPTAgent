@@ -1,0 +1,13 @@
+flowchart TD
+    A[开始] --> B{判断条件}
+    B -->|满足条件| C[执行操作A]
+    B -->|不满足| D[执行操作B]
+    C --> E[记录日志]
+    D --> E
+    E --> F[结束]
+
+    style A fill:#e1f5ff
+    style F fill:#e1f5ff
+    style B fill:#fff9c4
+    style C fill:#c8e6c9
+    style D fill:#ffccbc
