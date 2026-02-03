@@ -1,6 +1,6 @@
 # Partly copied from wonderwhy-er/DesktopCommanderMCP
 # ? global dependency
-FROM node:lts-bullseye-slim
+FROM docker.1ms.run/library/node:lts-bullseye-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 RUN sed -i 's|http://deb.debian.org/debian|http://mirrors.tuna.tsinghua.edu.cn/debian|g' /etc/apt/sources.list && \
@@ -54,14 +54,17 @@ RUN apt-get update && apt-get install -y --fix-missing --no-install-recommends \
         fonts-comic-neue \
         imagemagick
 
-RUN mkdir -p /usr/src/pptagent&& \
-    cd /usr/src/pptagent && \
-    git clone https://github.com/icip-cas/PPTAgent.git . && \
-    npm install --ignore-scripts && \
-    npx playwright install chromium
+# Create pptagent directory and install playwright
+RUN mkdir -p /usr/src/pptagent/deeppresenter
+WORKDIR /usr/src/pptagent
+RUN npx playwright install chromium
 
-# ? project dependency
+# Copy deeppresenter code for installation
+COPY . /usr/src/pptagent/deeppresenter/
 
+# Install Node.js dependencies for html2pptx
+WORKDIR /usr/src/pptagent/deeppresenter/deeppresenter/html2pptx
+RUN npm install fast-glob minimist pptxgenjs playwright sharp
 WORKDIR /usr/src/pptagent
 
 # Set environment variables
@@ -74,10 +77,23 @@ ENV PATH="/opt/.venv/bin:${PATH}" \
 RUN uv venv --python 3.13 $VIRTUAL_ENV && \
     uv pip install -e deeppresenter
 
+# Install additional dependencies for API server
+RUN uv pip install fastapi uvicorn sse-starlette httpx
+
+# Install Playwright browsers for Python
+RUN $VIRTUAL_ENV/bin/python -m playwright install chromium
+
 # install libreoffice for pptx2image converting
 RUN apt install -y libreoffice poppler-utils
 RUN apt install -y docker.io
 
 RUN fc-cache -f
 
-CMD ["bash", "-c", "umask 000 && python webui.py 0.0.0.0"]
+# Copy startup script
+COPY docker/start_services.sh /usr/src/pptagent/start_services.sh
+RUN chmod +x /usr/src/pptagent/start_services.sh
+
+# Expose API port
+EXPOSE 4397
+
+CMD ["bash", "-c", "/usr/src/pptagent/start_services.sh"]

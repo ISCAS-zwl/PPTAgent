@@ -13,8 +13,8 @@ services:
 
   deeppresenter-host:
     build:
-      context: ./deeppresenter/docker
-      dockerfile: Host.Dockerfile
+      context: ./deeppresenter
+      dockerfile: docker/Host.Dockerfile
       args:
         http_proxy: ${http_proxy:-}
         https_proxy: ${https_proxy:-}
@@ -23,14 +23,30 @@ services:
     container_name: deeppresenter-host
     ports:
       - "7861:7861"
+      - "4397:4397"
     environment:
       DEEPPRESENTER_HOST_WORKSPACE_BASE: ${PWD}/workspace
       DEEPPRESENTER_WORKSPACE_BASE: /opt/workspace
       DEEPPRESENTER_LOG_LEVEL: 0 # 0: debug, 10: info, 20: warning
+      # 代理设置
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      no_proxy: ${no_proxy:-localhost,127.0.0.1}
     volumes:
       - ./workspace:/opt/workspace
       - ./deeppresenter:/usr/src/pptagent/deeppresenter
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - pptagent_default
+      - fronted_pptagent-network
+
+networks:
+  pptagent_default:
+    driver: bridge
+  fronted_pptagent-network:
+    external: true
 
 volumes:
   deeppresenter_workspace:

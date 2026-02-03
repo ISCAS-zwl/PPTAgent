@@ -5,7 +5,6 @@ import { useTaskStore } from "@/store/taskStore";
 import Sidebar from "@/components/Sidebar";
 import SearchBox from "@/components/SearchBox";
 import TaskStatusBar from "@/components/TaskStatusBar";
-import TaskGrid from "@/components/TaskGrid";
 import ArtifactViewer from "@/components/ArtifactViewer";
 
 export default function Home() {
@@ -24,7 +23,7 @@ export default function Home() {
       <Sidebar />
 
       {/* 主内容区域 - 根据侧边栏状态动态调整左边距 */}
-      <main className={`transition-all duration-300 ease-in-out min-h-screen ${isSidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
+      <main className={`transition-all duration-300 ease-in-out min-h-screen ${isSidebarCollapsed ? 'ml-16' : 'ml-72'}`}>
         {/* 新建任务视图 */}
         {sidebarView === "new" && (
           <div className="flex flex-col items-center justify-center min-h-screen px-4 py-8">
@@ -37,91 +36,84 @@ export default function Home() {
                 </p>
               </div>
               <SearchBox />
-
-              {/* 个性化卡片 */}
-              <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-4xl">
-                <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="text-3xl mb-3">📊</div>
-                  <h3 className="font-semibold mb-2 text-gray-800 dark:text-gray-100">商业报告</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    生成专业的商业分析和数据报告
-                  </p>
-                </div>
-                <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="text-3xl mb-3">🎓</div>
-                  <h3 className="font-semibold mb-2 text-gray-800 dark:text-gray-100">教育培训</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    创建引人入胜的教学课件
-                  </p>
-                </div>
-                <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="text-3xl mb-3">🚀</div>
-                  <h3 className="font-semibold mb-2 text-gray-800 dark:text-gray-100">产品发布</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    设计吸引人的产品展示
-                  </p>
-                </div>
-            </div>
           </div>
         )}
 
-        {/* 所有任务视图 */}
+        {/* 任务详情视图 - 当选中任务时显示 */}
         {sidebarView === "all" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 px-4 py-8">
-            <div className="space-y-4">
+          <div className="p-6 min-h-screen">
+            {selectedTask ? (
+              <div className="max-w-5xl mx-auto">
+                {/* 任务信息头部 */}
+                <div className="mb-6 bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          selectedTask.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                          selectedTask.status === 'running' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                          selectedTask.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                          'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                        }`}>
+                          {selectedTask.status === 'completed' ? '已完成' :
+                           selectedTask.status === 'running' ? '运行中' :
+                           selectedTask.status === 'failed' ? '失败' : '空闲'}
+                        </span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                          ID: {selectedTask.id}
+                        </span>
+                      </div>
+                      <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
+                        {selectedTask.prompt || "未命名任务"}
+                      </h1>
+                      <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                        <span>创建时间: {new Date(selectedTask.createdAt).toLocaleString()}</span>
+                        {selectedTask.pages && <span>页数: {selectedTask.pages}</span>}
+                        {selectedTask.samples && <span>样本数: {selectedTask.samples.length}</span>}
+                      </div>
+                    </div>
+                  </div>
 
+                  {/* 进度条 */}
+                  {selectedTask.status === 'running' && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="text-gray-600 dark:text-gray-400">生成进度</span>
+                        <span className="text-blue-600 dark:text-blue-400">{selectedTask.progress || 0}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div
+                          className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${selectedTask.progress || 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
-              {tasks.length === 0 ? (
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center">
-                  <p className="text-gray-500 dark:text-gray-400">暂无任务</p>
-                  <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                    点击"新建任务"开始创建
+                  {/* 错误信息 */}
+                  {selectedTask.error && (
+                    <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <p className="text-sm text-red-600 dark:text-red-400">{selectedTask.error}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 结果预览 */}
+                <ArtifactViewer task={selectedTask} />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">📋</div>
+                  <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    选择一个任务查看详情
+                  </h2>
+                  <p className="text-gray-500 dark:text-gray-400">
+                    从左侧任务列表中选择一个任务，或创建新任务
                   </p>
                 </div>
-              ) : (
-                <TaskGrid />
-              )}
-            </div>
-            <div className="lg:sticky lg:top-8 h-fit">
-              {selectedTask ? (
-                <ArtifactViewer task={selectedTask} />
-              ) : (
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center text-gray-500 dark:text-gray-400">
-                  选择一个任务查看详情
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 搜索视图 */}
-        {sidebarView === "search" && (
-          <div className="px-4 py-8">
-            <div className="max-w-4xl mx-auto">
-              <div className="mb-6">
-                <SearchBox />
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  {tasks.length === 0 ? (
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center">
-                      <p className="text-gray-500 dark:text-gray-400">暂无任务</p>
-                    </div>
-                  ) : (
-                    <TaskGrid />
-                  )}
-                </div>
-                <div className="lg:sticky lg:top-8 h-fit">
-                  {selectedTask ? (
-                    <ArtifactViewer task={selectedTask} />
-                  ) : (
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center text-gray-500 dark:text-gray-400">
-                      选择一个任务查看详情
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         )}
       </main>

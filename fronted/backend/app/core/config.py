@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # PPTAgent Configuration
     pptagent_workspace: str = "/workspace"
-    pptagent_docker_url: str = "http://deeppresenter-host:7861"
+    pptagent_docker_url: str = "http://deeppresenter-host:4397"
     pptagent_mode: str = "auto"  # local, docker, auto
 
     model_config = SettingsConfigDict(
@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> List[str]:
         """Convert CORS origins string to list"""
+        # 支持 * 通配符，允许所有来源
+        if self.cors_origins == "*":
+            return ["*"]
         if isinstance(self.cors_origins, str):
             return [origin.strip() for origin in self.cors_origins.split(",")]
         return [self.cors_origins]

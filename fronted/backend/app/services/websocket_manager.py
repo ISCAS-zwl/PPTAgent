@@ -42,12 +42,19 @@ class ConnectionManager:
 
     async def send_to_task_subscribers(self, task_id: str, message: WebSocketMessage):
         """向任务的所有订阅者发送消息"""
+        subscribers = self.task_subscriptions.get(task_id, set())
+        print(f"[WebSocket] Sending {message.type} to task {task_id[:8]}, subscribers: {len(subscribers)}")
+
         if task_id in self.task_subscriptions:
             message_json = message.model_dump_json()
+            # 调试：打印实际发送的 JSON 格式
+            if message.type == "progress":
+                print(f"[WebSocket] Progress message JSON: {message_json[:200]}")
             disconnected = set()
             for websocket in self.task_subscriptions[task_id]:
                 try:
                     await websocket.send_text(message_json)
+                    print(f"[WebSocket] Message sent successfully")
                 except Exception as e:
                     print(f"Error sending message to websocket: {e}")
                     disconnected.add(websocket)

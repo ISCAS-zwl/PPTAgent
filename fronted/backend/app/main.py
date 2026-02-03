@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.redis import close_redis
-from app.api import tasks, websocket
+from app.api import tasks, websocket, files
 from app.tasks.task_processor import start_task_worker
 
 
@@ -38,6 +38,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(tasks.router)
 app.include_router(websocket.router)
+app.include_router(files.router)
 
 
 @app.get("/")

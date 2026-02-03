@@ -44,6 +44,9 @@ async def create_task(request: CreateTaskRequest):
         status=TaskStatus.IDLE,
         samples=samples,
         options=request.options or {},
+        pages=request.pages,
+        output_type=request.output_type,
+        uploaded_file_id=request.uploaded_file_id,
     )
 
     # 保存到 Redis
@@ -80,3 +83,21 @@ async def delete_task(task_id: str):
 
     await TaskService.delete_task(task_id)
     return {"status": "deleted", "task_id": task_id}
+
+
+@router.patch("/task/{task_id}")
+async def update_task(task_id: str, updates: dict):
+    """更新任务（支持重命名等）"""
+    task = await TaskService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # 只允许更新特定字段
+    allowed_fields = {"prompt"}
+    filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+
+    if not filtered_updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    await TaskService.update_task(task_id, filtered_updates)
+    return {"status": "updated", "task_id": task_id}

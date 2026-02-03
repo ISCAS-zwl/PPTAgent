@@ -1,0 +1,36 @@
+[
+    {
+        "name": "deeppresenter",
+        "description": "DeepPresenter Tools",
+        "command": "python",
+        "args": [
+            "/usr/src/pptagent/deeppresenter/deeppresenter/tools/server.py",
+            "$WORKSPACE"
+        ],
+        "env": {
+            "MINERU_API_KEY": "eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI1NTcwNTgxNiIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc2ODM3MDAzNywiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiYzk3YjQ2YzItOTZkYi00ZWUzLThlY2ItMzYyYTUwYmEwODViIiwiZW1haWwiOiIiLCJleHAiOjE3Njk1Nzk2Mzd9.opDnL58Pq7UpRqROmiJEIf3VIFWskY2FDFD2D68hdKgG9FRahuwRrpvMXmI_6sEkabH0lciDebStIehN1JmZmA",
+            "TAVILY_API_KEY": "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",
+            "LLM_CONFIG_FILE": "$LLM_CONFIG_FILE"
+        }
+    },
+    {
+        "name": "desktop_commander",
+        "description": "https://github.com/wonderwhy-er/DesktopCommanderMCP",
+        "command": "docker",
+        "args": [
+            "run",
+            "--security-opt",
+            "seccomp=unconfined",
+            "--init",
+            "--name",
+            "$WORKSPACE_ID",
+            "-i",
+            "--rm",
+            "-v",
+            "$HOST_WORKSPACE:$WORKSPACE",
+            "-w",
+            "$WORKSPACE",
+            "deeppresenter-sandbox:0.1.0"
+        ]
+    }
+]
