@@ -193,6 +193,7 @@ class TaskProcessor:
     @staticmethod
     async def _process_multiple_samples(task: Task, samples: List[Sample], base_options: Dict[str, Any]):
         """并发处理多个样本"""
+        import uuid
         print(f"[TaskProcessor] Processing {len(samples)} samples concurrently for task {task.id}")
 
         # 发送开始消息
@@ -208,7 +209,8 @@ class TaskProcessor:
         # 创建并发任务
         async def process_sample(sample: Sample, sample_index: int) -> Dict[str, Any]:
             """处理单个样本的协程"""
-            sample_task_id = f"{task.id}-sample-{sample_index}"
+            # 使用完全独立的 UUID 作为 task_id，避免 DeepPresenter logger 冲突
+            sample_task_id = str(uuid.uuid4())
             file_path = None
             token_stats = None
             content_chunks = []
