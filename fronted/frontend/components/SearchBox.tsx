@@ -128,10 +128,9 @@ export default function SearchBox() {
               className="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm outline-none border-none text-gray-700 dark:text-gray-300"
               disabled={loading}
             >
-              <option value={1}>1 个样本</option>
-              <option value={2}>2 个样本</option>
-              <option value={3}>3 个样本</option>
-              <option value={4}>4 个样本</option>
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>{n} 个样本</option>
+              ))}
             </select>
             <button
               type="submit"

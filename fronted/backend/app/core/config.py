@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # Task Configuration
-    max_sample_count: int = 4
+    max_sample_count: int = 10
     default_sample_count: int = 1
 
     # PPTAgent Configuration
