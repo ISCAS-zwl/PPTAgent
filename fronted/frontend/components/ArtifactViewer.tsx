@@ -1,13 +1,13 @@
 "use client";
 
-import { Task, Sample } from "@/types/task";
+import { Task, Sample, Artifact } from "@/types/task";
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Code, Eye, Download, Maximize2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Code, Eye, Download, Maximize2, ChevronLeft, ChevronRight, Archive } from "lucide-react";
 import remarkGfm from "remark-gfm";
-import { getDownloadUrl } from "@/lib/api";
+import { getDownloadUrl, getWorkspaceZipUrl, getSlidePreviewUrl } from "@/lib/api";
 
 interface ArtifactViewerProps {
   task: Task;
@@ -18,6 +18,157 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const [selectedSampleIndex, setSelectedSampleIndex] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  const extractSlideLinks = (artifact?: Artifact) => {
+    if (!artifact || !artifact.content) return [] as string[];
+    const links = new Set<string>();
+
+    // JSON 结构尝试提取
+    try {
+      const parsed = JSON.parse(artifact.content);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((item) => {
+          if (typeof item === "string") {
+            links.add(item);
+          } else if (item?.html_file) {
+            links.add(item.html_file);
+          }
+        });
+      }
+      if (parsed?.slides && Array.isArray(parsed.slides)) {
+        parsed.slides.forEach((s: any) => {
+          if (typeof s === "string") links.add(s);
+          if (s?.html_file) links.add(s.html_file);
+        });
+      }
+      if (parsed?.html_file) links.add(parsed.html_file);
+      if (parsed?.html_files && Array.isArray(parsed.html_files)) {
+        parsed.html_files.forEach((f: any) => typeof f === "string" && links.add(f));
+      }
+    } catch (err) {
+      // ignore JSON parse errors; fallback to regex
+    }
+
+    // 正则匹配 slides/*.html
+    const regex = /slides\/[A-Za-z0-9_-]+\.html/gi;
+    let match;
+    while ((match = regex.exec(artifact.content)) !== null) {
+      links.add(match[0]);
+    }
+
+    return Array.from(links);
+  };
+
+  const extractFirstHtmlPath = (text: string) => {
+    const match = text.match(/html_file\"?\s*:\s*\"?([^"\s]+\.html)\"?|\b(slides?\/[A-Za-z0-9._-]+\.html)/i);
+    return match ? (match[1] || match[2]) : null;
+  };
+
+  const markdownComponents = {
+    code(props: any) {
+      const { className, children, ...rest } = props;
+      const match = /language-(\w+)/.exec(className || "");
+      const inline = !match;
+      if (!inline && match) {
+        const raw = String(children).replace(/\n$/, "");
+        const htmlPath = extractFirstHtmlPath(raw);
+        const syntaxNode = (
+          <SyntaxHighlighter
+            style={vscDarkPlus}
+            language={match[1]}
+            PreTag="div"
+            customStyle={{ fontSize: "12px" }}
+          >
+            {raw}
+          </SyntaxHighlighter>
+        );
+
+        if (htmlPath) {
+          const previewUrl = getSlidePreviewUrl(task.id, htmlPath, hasMultipleSamples ? selectedSampleIndex : undefined);
+          return (
+            <div className="space-y-2">
+              {syntaxNode}
+              <div className="rounded-lg border border-gray-700 overflow-hidden bg-black">
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-80 border-0 bg-white"
+                  sandbox="allow-scripts"
+                  title={`slide-preview-${htmlPath}`}
+                />
+                <div className="px-3 py-2 text-xs text-gray-200 break-all">{htmlPath}</div>
+              </div>
+            </div>
+          );
+        }
+
+        return syntaxNode;
+      }
+
+      return (
+        <code
+          className={`${className} px-1.5 py-0.5 rounded border border-gray-700 bg-black text-amber-200`}
+          {...rest}
+        >
+          {children}
+        </code>
+      );
+    },
+    strong(props: any) {
+      const { children } = props;
+      const text = String(children);
+      if (text.includes("Assistant") || text.includes("🤖")) {
+        return <strong className="text-blue-600 dark:text-blue-400">{children}</strong>;
+      }
+      if (text.includes("Tool") || text.includes("🔧") || text.includes("📝")) {
+        return <strong className="text-green-600 dark:text-green-400">{children}</strong>;
+      }
+      if (text.includes("System") || text.includes("⚙️")) {
+        return <strong className="text-purple-600 dark:text-purple-400">{children}</strong>;
+      }
+      return <strong>{children}</strong>;
+    },
+    p(props: any) {
+      const { className, children, ...rest } = props;
+      const text = Array.isArray(children) ? children.map((c: any) => (typeof c === "string" ? c : "")).join("") : String(children || "");
+      const htmlPath = extractFirstHtmlPath(text);
+
+      if (htmlPath) {
+        const previewUrl = getSlidePreviewUrl(task.id, htmlPath, hasMultipleSamples ? selectedSampleIndex : undefined);
+        return (
+          <div className="mb-3 space-y-2">
+            <div
+              className={`bg-neutral-900 text-white border border-black rounded-lg px-3 py-2 shadow-sm ${
+                className || ""
+              }`}
+              {...rest}
+            >
+              {children}
+            </div>
+            <div className="rounded-lg border border-gray-700 overflow-hidden bg-black">
+              <iframe
+                src={previewUrl}
+                className="w-full h-80 border-0 bg-white"
+                sandbox="allow-scripts"
+                title={`slide-preview-${htmlPath}`}
+              />
+              <div className="px-3 py-2 text-xs text-gray-200 break-all">{htmlPath}</div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <p
+          className={`bg-neutral-900 text-white border border-black rounded-lg px-3 py-2 mb-3 shadow-sm ${
+            className || ""
+          }`}
+          {...rest}
+        >
+          {children}
+        </p>
+      );
+    },
+  };
 
   // 自动滚动到底部
   useEffect(() => {
@@ -30,6 +181,8 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
   const selectedSample = task.samples[selectedSampleIndex];
   const hasMultipleSamples = task.samples.length > 1;
   const completedSamples = task.samples.filter(s => s.status === "completed");
+  const slideLinksFromTask = extractSlideLinks(task.artifact);
+  const slideLinksFromSamples = task.samples.flatMap((s) => extractSlideLinks(s.artifact));
 
   const handleDownload = (sampleIndex?: number) => {
     // 如果指定了样本索引，下载该样本的文件
@@ -57,6 +210,11 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
     a.download = `${task.id}.${task.artifact.type === "html" ? "html" : "txt"}`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadWorkspaceZip = (sampleIndex?: number) => {
+    const url = getWorkspaceZipUrl(task.id, sampleIndex);
+    window.open(url, "_blank");
   };
 
   // 获取样本内容用于显示
@@ -150,9 +308,18 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
             <button
               onClick={() => handleDownload()}
               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title="下载"
+              title="下载 PPT/PDF"
             >
               <Download size={18} />
+            </button>
+          )}
+          {task.artifact?.type === "ppt" && (
+            <button
+              onClick={() => handleDownloadWorkspaceZip(hasMultipleSamples ? selectedSampleIndex : undefined)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title={hasMultipleSamples ? `下载当前样本工作区 ZIP (样本 ${selectedSampleIndex + 1})` : "下载工作区压缩包"}
+            >
+              <Archive size={18} />
             </button>
           )}
           <button
@@ -177,43 +344,7 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
             <div className="prose dark:prose-invert max-w-none prose-sm">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
-                components={{
-                  code(props) {
-                    const { node, className, children, ...rest } = props;
-                    const match = /language-(\w+)/.exec(className || "");
-                    const inline = !match;
-                    return !inline && match ? (
-                      <SyntaxHighlighter
-                        style={vscDarkPlus}
-                        language={match[1]}
-                        PreTag="div"
-                        customStyle={{ fontSize: "12px" }}
-                      >
-                        {String(children).replace(/\n$/, "")}
-                      </SyntaxHighlighter>
-                    ) : (
-                      <code className={`${className} bg-gray-100 dark:bg-gray-700 px-1 rounded`} {...rest}>
-                        {children}
-                      </code>
-                    );
-                  },
-                  // 自定义 strong 样式
-                  strong(props) {
-                    const { children } = props;
-                    const text = String(children);
-                    // 根据角色添加不同颜色
-                    if (text.includes("Assistant") || text.includes("🤖")) {
-                      return <strong className="text-blue-600 dark:text-blue-400">{children}</strong>;
-                    }
-                    if (text.includes("Tool") || text.includes("🔧") || text.includes("📝")) {
-                      return <strong className="text-green-600 dark:text-green-400">{children}</strong>;
-                    }
-                    if (text.includes("System") || text.includes("⚙️")) {
-                      return <strong className="text-purple-600 dark:text-purple-400">{children}</strong>;
-                    }
-                    return <strong>{children}</strong>;
-                  },
-                }}
+                components={markdownComponents}
               >
                 {sampleContent || "正在初始化..."}
               </ReactMarkdown>
@@ -296,16 +427,28 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
                               )}
                             </div>
                             {sample.status === "completed" && sample.artifact && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownload(index);
-                                }}
-                                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded flex items-center gap-1 transition-colors"
-                              >
-                                <Download size={14} />
-                                下载
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownload(index);
+                                  }}
+                                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded flex items-center gap-1 transition-colors"
+                                >
+                                  <Download size={14} />
+                                  下载 PPTX
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownloadWorkspaceZip(index);
+                                  }}
+                                  className="px-3 py-1 bg-gray-900 hover:bg-gray-800 text-white text-sm rounded flex items-center gap-1 transition-colors"
+                                >
+                                  <Archive size={14} />
+                                  工作区 ZIP
+                                </button>
+                              </div>
                             )}
                           </div>
                           {sample.artifact && (
@@ -331,15 +474,49 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDownload()}
-                      className="mt-3 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 transition-colors"
-                    >
-                      <Download size={18} />
-                      下载文件
-                    </button>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <button
+                        onClick={() => handleDownload()}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 transition-colors"
+                      >
+                        <Download size={18} />
+                        下载 PPTX
+                      </button>
+                      <button
+                          onClick={() => handleDownloadWorkspaceZip()}
+                        className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg flex items-center gap-2 transition-colors"
+                      >
+                        <Archive size={18} />
+                        下载工作区 ZIP
+                      </button>
+                    </div>
                   </div>
                 )}
+
+                  {/* HTML 页预览 */}
+                  {(slideLinksFromTask.length > 0 || slideLinksFromSamples.length > 0) && (
+                    <div className="space-y-2">
+                      <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-200">页面预览 (HTML)</h5>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {[...slideLinksFromTask, ...slideLinksFromSamples].map((link, idx) => (
+                          <div
+                            key={`${link}-${idx}`}
+                            className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-black"
+                          >
+                            <iframe
+                              src={link}
+                              className="w-full h-64 border-0 bg-white"
+                              sandbox="allow-scripts allow-same-origin"
+                              title={`slide-${idx}`}
+                            />
+                            <div className="px-3 py-2 text-xs bg-gray-900 text-gray-100 break-all">
+                              {link}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
               </div>
             )}
 
@@ -350,26 +527,7 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
                   <div className="prose dark:prose-invert max-w-none">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
-                      components={{
-                        code(props) {
-                          const { node, className, children, ...rest } = props;
-                          const match = /language-(\w+)/.exec(className || "");
-                          const inline = !match;
-                          return !inline && match ? (
-                            <SyntaxHighlighter
-                              style={vscDarkPlus}
-                              language={match[1]}
-                              PreTag="div"
-                            >
-                              {String(children).replace(/\n$/, "")}
-                            </SyntaxHighlighter>
-                          ) : (
-                            <code className={className} {...rest}>
-                              {children}
-                            </code>
-                          );
-                        },
-                      }}
+                      components={markdownComponents}
                     >
                       {task.artifact.content}
                     </ReactMarkdown>

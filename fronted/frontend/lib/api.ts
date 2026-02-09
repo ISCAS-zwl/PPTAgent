@@ -132,6 +132,21 @@ export function getDownloadUrl(taskId: string, sampleIndex?: number): string {
   return `${API_BASE_URL}/api/download/${taskId}`;
 }
 
+export function getWorkspaceZipUrl(taskId: string, sampleIndex?: number): string {
+  if (sampleIndex !== undefined) {
+    return `${API_BASE_URL}/api/download/${taskId}/workspace-zip?sample=${sampleIndex}`;
+  }
+  return `${API_BASE_URL}/api/download/${taskId}/workspace-zip`;
+}
+
+export function getSlidePreviewUrl(taskId: string, htmlFile: string, sampleIndex?: number): string {
+  const encoded = encodeURIComponent(htmlFile);
+  if (sampleIndex !== undefined) {
+    return `${API_BASE_URL}/api/preview/slide?task_id=${taskId}&html_file=${encoded}&sample=${sampleIndex}`;
+  }
+  return `${API_BASE_URL}/api/preview/slide?task_id=${taskId}&html_file=${encoded}`;
+}
+
 export async function deleteTask(taskId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/task/${taskId}`, {
     method: "DELETE",
