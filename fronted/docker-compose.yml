@@ -16,6 +16,8 @@ services:
       - DEEPPRESENTER_WORKSPACE_BASE=/opt/workspace
       # HOST_WORKSPACE_BASE 必须是主机上的真实路径，用于 sandbox 容器挂载
       - DEEPPRESENTER_HOST_WORKSPACE_BASE=${PWD}/../workspace
+      # 配置文件路径
+      - CONFIG_FILE=/usr/src/pptagent/deeppresenter/deeppresenter/config.yaml
       # 日志级别: 0=debug, 10=info, 20=warning
       - DEEPPRESENTER_LOG_LEVEL=0
       # 代理设置 - 用于 HuggingFace 模型下载

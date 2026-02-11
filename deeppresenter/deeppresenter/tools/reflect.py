@@ -1,28 +1,30 @@
 import base64
 import os
 import re
+import sys
 import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Literal
 
-from appcore import mcp
+from fastmcp import FastMCP
 from mcp.types import ImageContent
 from pptagent.model_utils import _get_lid_model
 from pptagent.utils import ppt_to_images
 
 from deeppresenter.utils.config import DeepPresenterConfig
-from deeppresenter.utils.log import error
+from deeppresenter.utils.log import error, set_logger
 from deeppresenter.utils.webview import convert_html_to_pptx
 
+mcp = FastMCP("DeepPresenter")
+CONFIG = DeepPresenterConfig.load_from_file(os.getenv("CONFIG_FILE"))
 LID_MODEL = _get_lid_model()
-LLM_CONFIG = DeepPresenterConfig.load_from_file(os.getenv("LLM_CONFIG_FILE"))
 
 
 @mcp.tool()
 async def inspect_slide(
     html_file: str,
-    aspect_ratio: Literal["16:9", "4:3", "A1"] = "16:9",
+    aspect_ratio: Literal["16:9", "4:3", "A1", "A2", "A3", "A4"] = "16:9",
 ) -> ImageContent | str:
     """
     Read the HTML file as an image.
@@ -32,14 +34,15 @@ async def inspect_slide(
         str: Error message if inspection fails
     """
     html_path = Path(html_file).absolute()
-    if not (html_path.exists() and html_path.suffix == ".html"):
-        return f"HTML path {html_path} does not exist or is not an HTML file"
+    assert html_path.is_file() and html_path.suffix == ".html", (
+        f"HTML path {html_path} does not exist or is not an HTML file"
+    )
     try:
         pptx_path = await convert_html_to_pptx(html_path, aspect_ratio=aspect_ratio)
     except Exception as e:
         return e
 
-    if LLM_CONFIG.design_agent.is_multimodal:
+    if CONFIG.design_agent.is_multimodal and CONFIG.heavy_reflect:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir)
             await ppt_to_images(str(pptx_path), str(output_dir))
@@ -56,7 +59,7 @@ async def inspect_slide(
             mimeType="image/jpeg",
         )
     else:
-        return "This slide looks good."
+        return "This slide is valid."
 
 
 @mcp.tool()
@@ -67,10 +70,8 @@ def inspect_manuscript(md_file: str) -> dict:
         md_file (str): The path to the markdown file
     """
     md_path = Path(md_file)
-    if not md_path.exists():
-        return {"error": f"file does not exist: {md_file}"}
-    if not md_file.lower().endswith(".md"):
-        return {"error": f"file is not a markdown file: {md_file}"}
+    assert md_path.exists(), f"file does not exist: {md_file}"
+    assert md_file.lower().endswith(".md"), f"file is not a markdown file: {md_file}"
 
     with open(md_file, encoding="utf-8") as f:
         markdown = f.read()
@@ -114,3 +115,13 @@ def inspect_manuscript(md_file: str) -> dict:
         )
 
     return result
+
+
+if __name__ == "__main__":
+    assert len(sys.argv) == 2, "Usage: python task.py <workspace>"
+    work_dir = Path(sys.argv[1])
+    assert work_dir.exists(), f"Workspace {work_dir} does not exist."
+    os.chdir(work_dir)
+    set_logger(f"task-{work_dir.stem}", work_dir / ".history" / "task.log")
+
+    mcp.run(show_banner=False)

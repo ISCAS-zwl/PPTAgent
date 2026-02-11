@@ -15,12 +15,12 @@ MAX_LOGGING_LENGTH = int(os.getenv("DEEPPRESENTER_MAX_LOGGING_LENGTH", 1024))
 
 # ============ Agent  ============
 RETRY_TIMES = int(os.getenv("RETRY_TIMES", 10))
-MAX_TOOLCALL_PER_TURN = int(os.getenv("MAX_TOOLCALL_PER_TURN", 9))
+MAX_TOOLCALL_PER_TURN = int(os.getenv("MAX_TOOLCALL_PER_TURN", 10))
 MAX_RETRY_INTERVAL = int(os.getenv("MAX_RETRY_INTERVAL", 60))
 # count in chars, this is about the first 4 page of a dual-column paper
-TOOL_CUTOFF_LEN = int(os.getenv("TOOL_CUTOFF_LEN", 8000))
+TOOL_CUTOFF_LEN = int(os.getenv("TOOL_CUTOFF_LEN", 4096))
 # count in tokens
-CONTEXT_LENGTH_LIMIT = int(os.getenv("CONTEXT_LENGTH_LIMIT", 90_000))
+CONTEXT_LENGTH_LIMIT = int(os.getenv("CONTEXT_LENGTH_LIMIT", 200_000))
 CUTOFF_WARNING = "NOTE: Output truncated (showing first {line} lines). Use `read_file` with `offset` parameter to continue reading from {resource_id}."
 
 # ============ Environment ============
@@ -71,7 +71,9 @@ You can freely install any required tools, packages, or command-line utilities t
 <Task Guidelines>
 - Exploration Principle: A warning is issued at 10% remaining computation budget, Until then, explore thoroughly and give your best effort.
 - Max Length: Tool Call Output exceeding {cutoff_len} characters will be truncated at the preceding line break. Full content is saved locally and accessible via `read_file` with `offset`.
-- Response Format: Every response must include reasoning content and a valid tool call.
+- Tool Call Principle:
+    1. Every response must include reasoning content and a valid tool call.
+    2. All tool calls are processed in parallel; do not emit tool calls with interdependencies in the same turn.
 - Toolcall Limit: You can calling up to {max_toolcall_per_turn} tools per turn.
 </Task Guidelines>
 """

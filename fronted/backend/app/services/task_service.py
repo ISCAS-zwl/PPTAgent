@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from app.core.redis import get_redis
 from app.models.task import Task, TaskStatus
 
@@ -17,6 +17,36 @@ class TaskService:
 
         # 添加到任务列表
         await redis.zadd("tasks", {task.id: task.created_at})
+
+    @staticmethod
+    async def append_message(task_id: str, sample_id: str, message: Dict) -> None:
+        """追加消息到任务的消息历史"""
+        redis = await get_redis()
+        messages_key = f"task:{task_id}:messages:{sample_id}"
+        await redis.rpush(messages_key, json.dumps(message, ensure_ascii=False))
+        await redis.expire(messages_key, 86400)  # 24小时过期
+
+    @staticmethod
+    async def get_messages(task_id: str, sample_id: str) -> List[Dict]:
+        """获取任务的完整消息历史"""
+        redis = await get_redis()
+        messages_key = f"task:{task_id}:messages:{sample_id}"
+        messages = await redis.lrange(messages_key, 0, -1)
+        return [json.loads(m) for m in messages]
+
+    @staticmethod
+    async def get_all_messages(task_id: str) -> Dict[str, List[Dict]]:
+        """获取任务所有样本的消息历史"""
+        redis = await get_redis()
+        task = await TaskService.get_task(task_id)
+        if not task:
+            return {}
+
+        result = {}
+        for sample in task.samples:
+            messages = await TaskService.get_messages(task_id, sample.id)
+            result[sample.id] = messages
+        return result
 
     @staticmethod
     async def get_task(task_id: str) -> Optional[Task]:

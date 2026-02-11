@@ -41,7 +41,6 @@ from deeppresenter.utils.log import (
     debug,
     info,
     timer,
-    warning,
 )
 from deeppresenter.utils.typings import (
     ChatMessage,
@@ -59,7 +58,6 @@ class Agent:
         agent_env: AgentEnv,
         workspace: Path,
         language: Literal["zh", "en"],
-        allow_reflection: bool = True,
         config_file: str | None = None,
         keep_reasoning: bool = True,
     ):
@@ -81,49 +79,25 @@ class Agent:
         if not config_file.exists():
             raise FileNotFoundError(f"Cannot found role config file at: {config_file} ")
 
+        # Setting basic context
         with open(config_file, encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
-        role_config = RoleConfig(**config_data)
-        self.llm: LLM = config[role_config.use_model]
-        self.model = self.llm.model
-        self.prompt: Template = Template(
-            role_config.instruction, undefined=StrictUndefined
-        )
-
-        if role_config.include_tool_servers == "all":
-            role_config.include_tool_servers = list(agent_env._server_tools)
-        for server in (
-            role_config.include_tool_servers + role_config.exclude_tool_servers
-        ):
-            assert server in agent_env._server_tools, (
-                f"Server {server} is not available"
-            )
-        for tool in role_config.include_tools + role_config.exclude_tools:
-            assert tool in agent_env._tools_dict, f"Tool {tool} is not available"
-        self.tools = []
-        for server in role_config.include_tool_servers:
-            if server not in role_config.exclude_tool_servers:
-                for tool in agent_env._server_tools[server]:
-                    if tool not in role_config.exclude_tools:
-                        self.tools.append(agent_env._tools_dict[tool])
-
-        for tool_name, tool in agent_env._tools_dict.items():
-            if tool_name in role_config.include_tools:
-                self.tools.append(tool)
-
-        if not allow_reflection:
-            if any(t["function"]["name"].startswith("inspect_") for t in self.tools):
-                self.system += "<Tips>You are not allowed to reflect and invoking inspect tools, please focus on provided tools and adjust your plan accordingly</Tips>"
-                self.tools = [
-                    t
-                    for t in self.tools
-                    if not t["function"]["name"].startswith("inspect_")
-                ]
-
-        if language not in role_config.system:
+        self.role_config = RoleConfig(**config_data)
+        self.llm: LLM = config[self.role_config.use_model]
+        self.model = self.llm.model_name
+        self._setup_toolset()
+        if language not in self.role_config.system:
             raise ValueError(f"Language '{language}' not found in system prompts")
-        self.system = role_config.system[language]
+        self.error_history: list[ToolCall | ChatMessage] = []
+        self.research_iter = 0
+        if config.context_folding:
+            self.context_warning = -1
 
+        # Setting tools and interative context
+        self.system = self.role_config.system[language]
+        self.prompt: Template = Template(
+            self.role_config.instruction, undefined=StrictUndefined
+        )
         # ? for those agents equipped with sandbox only
         if any(t["function"]["name"] == "execute_command" for t in self.tools):
             self.system += AGENT_PROMPT.format(
@@ -133,8 +107,8 @@ class Agent:
                 max_toolcall_per_turn=MAX_TOOLCALL_PER_TURN,
             )
 
-            if config.offline_mode:
-                self.system += OFFLINE_PROMPT
+        if config.offline_mode:
+            self.system += OFFLINE_PROMPT
 
         if config.context_folding:
             self.system += CONTEXT_MODE_PROMPT
@@ -142,12 +116,31 @@ class Agent:
         self.chat_history: list[ChatMessage] = [
             ChatMessage(role=Role.SYSTEM, content=self.system)
         ]
-        self.research_iter = 0
-        if config.context_folding:
-            self.context_warning = -1
-        debug(f"{self.name} Agent got {len(self.tools)} tools")
         available_tools = [tool["function"]["name"] for tool in self.tools]
-        debug(f"Available tools: {', '.join(available_tools)}")
+        debug(
+            f"{self.name} Agent got {len(self.tools)} tools: {', '.join(available_tools)}"
+        )
+
+    def _setup_toolset(self):
+        toolset = self.role_config.toolset
+        if toolset.include_tool_servers == "all":
+            toolset.include_tool_servers = list(self.agent_env._server_tools)
+        for server in toolset.include_tool_servers:
+            assert server in self.agent_env._server_tools, (
+                f"Server {server} is not available"
+            )
+        for tool in toolset.include_tools + toolset.exclude_tools:
+            assert tool in self.agent_env._tools_dict, f"Tool {tool} is not available"
+        self.tools = []
+        for server in toolset.include_tool_servers:
+            if server not in toolset.exclude_tool_servers:
+                for tool in self.agent_env._server_tools[server]:
+                    if tool not in toolset.exclude_tools:
+                        self.tools.append(self.agent_env._tools_dict[tool])
+
+        for tool_name, tool in self.agent_env._tools_dict.items():
+            if tool_name in toolset.include_tools:
+                self.tools.append(tool)
 
     async def chat(
         self,
@@ -174,9 +167,10 @@ class Agent:
                 ChatMessage(
                     role=response.choices[0].message.role,
                     content=response.choices[0].message.content,
-                    reasoning_content=getattr(
-                        response.choices[0].message, "reasoning_content", None
-                    ),
+                    cost=response.usage,
+                    reasoning=getattr(response.choices[0].message, "reasoning", None)
+                    if self.keep_reasoning
+                    else None,
                 )
             )
             self.log_message(self.chat_history[-1])
@@ -206,16 +200,15 @@ class Agent:
                 self.cost += response.usage
                 self.context_length = response.usage.total_tokens
             agent_message: ChatCompletionMessage = response.choices[0].message
-        if self.keep_reasoning and hasattr(agent_message, "reasoning_content"):
-            reasoning = agent_message.reasoning_content
-        else:
-            reasoning = None
         self.chat_history.append(
             ChatMessage(
                 role=agent_message.role,
                 content=agent_message.content,
+                cost=response.usage,
                 tool_calls=agent_message.tool_calls,
-                reasoning_content=reasoning,
+                reasoning=getattr(agent_message, "reasoning", None)
+                if self.keep_reasoning
+                else None,
             )
         )
         self.log_message(self.chat_history[-1])
@@ -266,9 +259,10 @@ class Agent:
                             role=Role.TOOL,
                             content=str(e),
                             tool_call_id=t.id,
+                            is_error=True,
                         )
                     )
-                    warning(f"Tool call `{t.function}` encountered error: {e}")
+                    info(f"Tool call `{t.function}` encountered error: {e}")
                     continue
             used_tools.add(t.function.name)
             coros.append(self.agent_env.tool_execute(t))
@@ -276,12 +270,9 @@ class Agent:
         observations.extend(await asyncio.gather(*coros))
         for obs in observations:
             if obs.has_image:
-                if (
-                    "gemini" in self.llm.model.lower()
-                    or "qwen" in self.llm.model.lower()
-                ):
+                if "gemini" in self.model.lower() or "qwen" in self.model.lower():
                     obs.role = Role.USER
-                if "claude" in self.llm.model.lower():
+                if "claude" in self.model.lower():
                     oai_b64 = obs.content[0]["image_url"]["url"]
                     obs.content = [
                         {
@@ -295,6 +286,14 @@ class Agent:
                     ]
 
         self.chat_history.extend(observations)
+
+        for t, o in zip(
+            sorted(tool_calls, key=lambda x: x.id),
+            sorted(observations, key=lambda x: x.id),
+        ):
+            if o.is_error:
+                self.error_history.append(t)
+                self.error_history.append(o)
 
         if finish_id is not None:
             for obs in observations:
@@ -333,7 +332,7 @@ class Agent:
         else:
             debug(f"{self.name}: {msg.text[:MAX_LOGGING_LENGTH]}...")
 
-    async def compact_history(self, keep_head: int = 10, keep_tail: int = 8):
+    async def compact_history(self, keep_head: int = 10, keep_tail: int = 4):
         """Summarize the history."""
         # ? it's 10 = system + user + (thinking, read, design, write)*2
         if keep_head + keep_tail > len(self.chat_history):
@@ -353,16 +352,14 @@ class Agent:
             tools=self.tools,
         )
         agent_message = response.choices[0].message
-        if self.keep_reasoning and hasattr(agent_message, "reasoning_content"):
-            reasoning = agent_message.reasoning_content
-        else:
-            reasoning = None
         summary_message = ChatMessage(
             id=f"context_fold_{uuid.uuid4().hex[:8]}",
             role=agent_message.role,
             content=agent_message.content,
             tool_calls=agent_message.tool_calls,
-            reasoning_content=reasoning,
+            reasoning=getattr(agent_message, "reasoning", None)
+            if self.keep_reasoning
+            else None,
         )
         debug(
             f"Summary of Resarch Iter {self.research_iter:02d}: \n"
@@ -403,7 +400,7 @@ class Agent:
         return head, tail
 
     def save_history(self, hist_dir: Path | None = None, message_only: bool = False):
-        hist_dir = hist_dir or self.workspace / "history"
+        hist_dir = hist_dir or self.workspace / ".history"
         hist_dir.mkdir(parents=True, exist_ok=True)
 
         history_file = hist_dir / f"{self.name}-history.jsonl"
@@ -433,16 +430,11 @@ class Agent:
                 indent=2,
             )
 
-        error_history = []
-        for idx, msg in enumerate(self.chat_history):
-            if msg.is_error:
-                error_history.append(self.chat_history[idx - 1 : idx + 2])
-
-        if error_history:
+        if self.error_history:
             error_file = hist_dir / f"{self.name}-errors.jsonl"
             with jsonlines.open(error_file, mode="w") as writer:
-                for context in error_history:
-                    writer.write([msg.model_dump() for msg in context])
+                for msg in self.error_history:
+                    writer.write(msg.model_dump())
 
         info(
             f"{self.name} done | cost:{self.cost} ctx:{self.context_length} | history:{history_file.name} config:{config_file.name}"

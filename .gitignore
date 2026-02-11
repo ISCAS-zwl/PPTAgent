@@ -15,6 +15,10 @@ CLAUDE.md
 AGENTS.md
 **/images/*.png
 **/images/*.jpg
+deeppresenter/deeppresenter/config.yaml
+deeppresenter/deeppresenter/mcp.json
+deeppresenter/deeppresenter/.tools.json
+**/test_output
 
 # Copy from vuejs
 
@@ -42,6 +46,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-deeppresenter/deeppresenter/config.yaml
-deeppresenter/deeppresenter/mcp.json
-

@@ -1,15 +1,18 @@
 import base64
 import os
 import re
+import sys
 import uuid
 from pathlib import Path
 
-from appcore import mcp
+from fastmcp import FastMCP
 from markitdown import MarkItDown
 from PIL import Image
 
-from deeppresenter.utils.log import warning
+from deeppresenter.utils.log import set_logger, warning
 from deeppresenter.utils.mineru_api import parse_pdf_offline, parse_pdf_online
+
+mcp = FastMCP(name="Any2Markdown")
 
 IMAGE_EXTENSIONS = [
     "bmp",
@@ -39,13 +42,10 @@ async def convert_to_markdown(file_path: str, output_folder: str) -> dict:
 
     output_path = Path(output_folder)
     output_path.mkdir(parents=True, exist_ok=True)
-    if len(os.listdir(output_path)) != 0:
-        return {
-            "success": False,
-            "error": "Error: output folder should be empty or not exist",
-        }
-    if not os.path.exists(file_path):
-        return {"success": False, "error": f"Error: file {file_path} does not exist"}
+    assert len(list(output_path.iterdir())) == 0, (
+        f"Output folder {output_folder} is not empty"
+    )
+    assert os.path.exists(file_path), f"Error: file {file_path} does not exist"
 
     markdown_file = output_path / f"{Path(file_path).stem}.md"
 
@@ -81,7 +81,8 @@ async def convert_to_markdown(file_path: str, output_folder: str) -> dict:
     images_with_info = []
     for img_path in images:
         try:
-            images_with_info.append((img_path, *Image.open(img_path).size))
+            with Image.open(img_path) as img:
+                images_with_info.append((img_path, *img.size))
         except:
             continue
 
@@ -118,3 +119,15 @@ def parse_base64_images(markdown: str, image_dir: Path) -> str:
         markdown = markdown.replace(data_uri, str(image_path))
 
     return markdown
+
+
+if __name__ == "__main__":
+    assert len(sys.argv) == 2, "Usage: python any2markdown.py <workspace>"
+    work_dir = Path(sys.argv[1])
+    assert work_dir.exists(), f"Workspace {work_dir} does not exist."
+    os.chdir(work_dir)
+    set_logger(
+        f"any2markdown-{work_dir.stem}", work_dir / ".history" / "any2markdown.log"
+    )
+
+    mcp.run(show_banner=False)

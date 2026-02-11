@@ -1,15 +1,19 @@
 import base64
 import os
+import sys
 from pathlib import Path
 
 import httpx
-from appcore import mcp
+from binaryornot.check import is_binary
+from fastmcp import FastMCP
 from PIL import Image
 
 from deeppresenter.utils.config import DeepPresenterConfig
-from deeppresenter.utils.log import debug, info
+from deeppresenter.utils.log import debug, info, set_logger
 
-LLM_CONFIG = DeepPresenterConfig.load_from_file(os.getenv("LLM_CONFIG_FILE"))
+mcp = FastMCP(name="ToolAgents")
+
+LLM_CONFIG = DeepPresenterConfig.load_from_file(os.getenv("CONFIG_FILE"))
 
 
 if LLM_CONFIG.t2i_model is not None:
@@ -79,9 +83,14 @@ async def image_caption(image_path: str) -> dict:
     Returns:
         The caption and size for the image
     """
-    if not Path(image_path).exists():
-        return {"error": f"Image path {image_path} does not exist"}
-    image_b64 = f"data:image/jpeg;base64,{base64.b64encode(open(image_path, 'rb').read()).decode('utf-8')}"
+    assert Path(image_path).is_file(), f"Image path {image_path} does not exist"
+    with Image.open(image_path) as img:
+        img.verify()
+        size = img.size
+    with open(image_path, "rb") as f:
+        image_b64 = (
+            f"data:image/jpeg;base64,{base64.b64encode(f.read()).decode('utf-8')}"
+        )
     response = await LLM_CONFIG.vision_model.run(
         messages=[
             {"role": "system", "content": _CAPTION_SYSTEM},
@@ -96,7 +105,7 @@ async def image_caption(image_path: str) -> dict:
         f"Image captioned: path='{image_path}', caption='{response.choices[0].message.content}'"
     )
     return {
-        "size": Image.open(image_path).size,
+        "size": size,
         "caption": response.choices[0].message.content,
     }
 
@@ -120,16 +129,17 @@ async def document_summary(task: str, document_path: str) -> str:
 
     Args:
         task: The specific task or objective for the report
-        document_path: Path to the pure text document to be analyzed, should be endswith like .txt or .md
+        document_path: Path to the pure text document to be analyzed.
 
     Returns:
         A structured summary report in Markdown format based on the task and document content
     """
-    if not Path(document_path).exists():
-        return "Document path does not exist"
-    if Path(document_path).suffix.lower() not in [".txt", ".md"]:
-        return "Document must be a text file with .txt or .md extension"
-    document = open(document_path, encoding="utf-8").read()
+    assert Path(document_path).is_file(), (
+        f"Document path {document_path} does not exist"
+    )
+    assert is_binary(document_path), "Provided document is not a text file"
+    with open(document_path, encoding="utf-8") as f:
+        document = f.read()
     response = await LLM_CONFIG.long_context_model.run(
         messages=[
             {"role": "system", "content": _SUMMARY_SYSTEM},
@@ -147,13 +157,12 @@ async def document_summary(task: str, document_path: str) -> str:
 
 
 if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(
-        image_generation(
-            "A beautiful landscape with mountains and a river",
-            512,
-            512,
-            "/tmp/test_image.jpg",
-        )
+    assert len(sys.argv) == 2, "Usage: python tool_agents.py <workspace>"
+    work_dir = Path(sys.argv[1])
+    assert work_dir.exists(), f"Workspace {work_dir} does not exist."
+    os.chdir(work_dir)
+    set_logger(
+        f"tool_agents-{work_dir.stem}", work_dir / ".history" / "tool_agents.log"
     )
+
+    mcp.run(show_banner=False)

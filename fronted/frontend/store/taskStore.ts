@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { Task, Sample, WebSocketMessage, TaskStatus } from '@/types/task';
+import { getTaskMessages, MessageItem } from '@/lib/api';
 
 export type SidebarView = "new" | "all" | "search";
 
@@ -13,6 +14,7 @@ interface TaskStore {
   searchQuery: string;
   isSidebarCollapsed: boolean;
   subscribedTaskIds: Set<string>;
+  loadedMessageTaskIds: Set<string>;
 
   // Actions
   setTasks: (tasks: Task[]) => void;
@@ -32,6 +34,7 @@ interface TaskStore {
   renameTask: (taskId: string, newPrompt: string) => void;
   subscribeTask: (taskId: string) => void;
   subscribeRunningTasks: () => void;
+  loadTaskMessages: (taskId: string) => Promise<void>;
 }
 
 // 动态获取 WebSocket URL
@@ -60,6 +63,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   searchQuery: "",
   isSidebarCollapsed: false,
   subscribedTaskIds: new Set<string>(),
+  loadedMessageTaskIds: new Set<string>(),
 
   setTasks: (tasks) => {
     set({ tasks });
@@ -129,6 +133,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     // 选择任务时自动订阅
     if (taskId) {
       get().subscribeTask(taskId);
+      // 加载消息历史
+      get().loadTaskMessages(taskId);
     }
   },
 
@@ -157,8 +163,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
     ws.onclose = () => {
       console.log('WebSocket disconnected');
-      // 清空订阅列表，重连后重新订阅
-      set({ subscribedTaskIds: new Set<string>() });
+      // 清空订阅列表和已加载消息列表，重连后重新订阅和加载
+      set({ subscribedTaskIds: new Set<string>(), loadedMessageTaskIds: new Set<string>() });
       // 尝试重连
       setTimeout(() => {
         if (get().ws?.readyState === WebSocket.CLOSED) {
@@ -340,6 +346,44 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         }
       });
       set({ subscribedTaskIds: new Set(subscribedTaskIds) });
+    }
+  },
+
+  loadTaskMessages: async (taskId) => {
+    const { loadedMessageTaskIds } = get();
+
+    // 如果已经加载过，不重复加载（除非任务正在运行）
+    const task = get().tasks.find(t => t.id === taskId);
+    if (loadedMessageTaskIds.has(taskId) && task?.status !== 'running') {
+      return;
+    }
+
+    try {
+      const messages = await getTaskMessages(taskId);
+
+      // 更新每个样本的内容
+      set((state) => ({
+        tasks: state.tasks.map((t) => {
+          if (t.id !== taskId) return t;
+
+          return {
+            ...t,
+            samples: t.samples.map((sample) => {
+              const sampleMessages = messages[sample.id] || [];
+              if (sampleMessages.length === 0) return sample;
+
+              // 将消息历史合并为内容字符串
+              const content = sampleMessages.map(m => m.content).join("\n\n");
+              return { ...sample, content };
+            }),
+          };
+        }),
+        loadedMessageTaskIds: new Set([...state.loadedMessageTaskIds, taskId]),
+      }));
+
+      console.log(`[TaskStore] Loaded messages for task ${taskId.slice(0, 8)}`);
+    } catch (error) {
+      console.error(`[TaskStore] Failed to load messages for task ${taskId}:`, error);
     }
   },
 

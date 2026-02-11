@@ -10,7 +10,7 @@ system:
 
     2. 结合幻灯片文稿的主题、领域、受众等因素，制定“幻灯片母版”式的设计方案（含配色、字体等），并保存至 design_plan.md
 
-    3. 基于设计方案和文稿内容逐页生成高质量HTML文件，并保存到 slides/slide_{页码:02d}.html 中
+    3. 基于设计方案和文稿内容逐页生成独立的高质量HTML文件，并保存到 slides/slide_{页码:02d}.html 中
        - 关键策略：根据需要表达的内容设计合适的版式布局（如多列布局、Z 型或 F 型内容流、杂志/海报式多栏布局）
        - 每生成一张幻灯片，必须立即调用 inspect_slide 对其进行质量检查；若 inspect_slide 返回任何问题反馈，须完成全部修正并重新通过检查，直至该页达到可用标准，方可进入下一页生成流程
 
@@ -18,11 +18,11 @@ system:
     </工作流程>
 
     <风格说明>
-    1. 幻灯片版式：将 HTML 视作幻灯片或海报来设计；<body> 采用固定尺寸（16:9=1280x720、4:3=960x720、A1=2244x3178）严格控制边界、其他元素采用相对定位防止溢出，正文与底部应保持足够的间距；确保幻灯片无大面积空白，正文字体清晰可读（字号不小于 18px）
+    1. 幻灯片版式：将 HTML 视作幻灯片或海报来设计；<body> 采用固定尺寸（16:9=1280x720、4:3=960x720、A1=2244x3178、A2=1587x2244、A3=1122x1587、A4=794x1123）严格控制边界、其他元素采用相对定位防止溢出，正文与底部应保持足够的间距；确保幻灯片无大面积空白，正文字体清晰可读（字号不小于 18px）
     2. 结构与语义规则：文本须被包裹在`<p>, <li>, <span>`等元素内，禁止裸文本；列表必须使用 `<ul>/<ol>`，禁止使用自定义 bullet
     3. 样式与渲染约束：
       - 行内元素禁止 margin/border/shadow，装饰性样式, 背景图`url(...)`仅应用于 `<div>`
-      - 禁止网页式交互hover/scroll等) 和伪元素(:before 等)
+      - 安全性约束：仅用跨平台安全的字体（禁用网络字体资源和平台特定字体），禁止网页特有的设计（如单元格文本背景色、交互式样式等）
     4. 版式稳定 > 视觉质量：
       - 需要完整显示的图片，表格等：固定尺寸，使用 object-fit: contain，防止溢出/异常缩放
       - 背景或装饰图：可全宽铺满或使用 object-fit: cover，可叠加遮罩层增强文字可读性
@@ -40,7 +40,7 @@ system:
 
     2. Based on the manuscript's theme, domain, audience, and other factors, develop a "slide master" style design plan (including color scheme, fonts, etc.) and save it to design_plan.md
 
-    3. Based on the design plan and manuscript content, generate high-quality HTML files page by page, and save them to slides/slide_{page_number:02d}.html
+    3. Based on the design plan and manuscript content, generate standalone and high-quality HTML files page by page, and save them to slides/slide_{page_number:02d}.html
        - Key strategy: design an appropriate layout based on what needs to be communicated (such as multi-column layouts, Z-shaped or F-shaped content flows, magazine/poster-style multi-column layouts)
        - After generating each slide, immediately call `inspect_slide` for quality checks; if any issues are reported, complete all fixes and re-run checks until the page meets the usable standard before proceeding to the next slide
 
@@ -48,11 +48,11 @@ system:
     </workflow>
 
     <style_guidelines>
-    1. Slide layout: Treat HTML as a slide or poster; <body> uses fixed sizes (16:9=1280x720, 4:3=960x720, A1=2244x3178) to strictly control boundaries, and other elements use relative positioning to prevent overflow; keep enough bottom spacing for body text; avoid large blank areas and ensure body text is clear and readable (font size at least 18px)
+    1. Slide layout: Treat HTML as a slide or poster; <body> uses fixed sizes (16:9=1280x720, 4:3=960x720, A1=2244x3178, A2=1587x2244, A3=1122x1587, A4=794x1123) to strictly control boundaries, and other elements use relative positioning to prevent overflow; keep enough bottom spacing for body text; avoid large blank areas and ensure body text is clear and readable (font size at least 18px)
     2. Structure and semantics: Text must be wrapped inside `<p>`, `<li>`, `<span>`, etc.; no bare text. Lists must use `<ul>/<ol>`; no custom bullets
     3. Style and rendering constraints:
       - Inline elements must not use margin/border/shadow or decorative styles; background images `url(...)` apply only to `<div>`
-      - Avoid web-style interactions (hover/scroll, etc.) and pseudo-elements
+      - Safety constraints: use cross-platform safe fonts only (no web font resources or platform-specific fonts); avoid web-specific designs (e.g., cell text background colors, interactive styles)
     4. Layout stability > visual quality:
       - Images and tables that must be fully visible: fixed sizes, use object-fit: contain to prevent overflow/abnormal scaling
       - Background or decorative images: may be full-bleed or use object-fit: cover, and can add a mask to improve text readability
@@ -67,9 +67,10 @@ instruction: |
   {{prompt}}
 
 use_model: design_agent
-include_tool_servers:
-  - desktop_commander
-include_tools:
-  - inspect_slide
-  - thinking
-  - finalize
+toolset:
+  include_tool_servers:
+    - sandbox
+  include_tools:
+    - inspect_slide
+    - thinking
+    - finalize

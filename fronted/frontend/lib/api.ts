@@ -170,3 +170,29 @@ export async function renameTask(taskId: string, newPrompt: string): Promise<voi
     throw new Error(`Failed to rename task: ${response.statusText}`);
   }
 }
+
+export interface MessageItem {
+  content: string;
+  role?: string;
+  tool_calls?: any[];
+}
+
+export async function getTaskMessages(taskId: string): Promise<Record<string, MessageItem[]>> {
+  const response = await fetch(`${API_BASE_URL}/api/task/${taskId}/messages`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to get task messages: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function getSampleMessages(taskId: string, sampleId: string): Promise<MessageItem[]> {
+  const response = await fetch(`${API_BASE_URL}/api/task/${taskId}/messages/${sampleId}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to get sample messages: ${response.statusText}`);
+  }
+
+  return response.json();
+}

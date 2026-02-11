@@ -112,6 +112,12 @@ class TaskProcessor:
                 if message_content:
                     content_chunks.append(message_content)
                     sample.content = "\n\n".join(content_chunks[-20:])
+                    # 持久化消息到 Redis
+                    await TaskService.append_message(
+                        task.id,
+                        sample.id,
+                        {"content": message_content, "role": event.get("role"), "tool_calls": event.get("tool_calls")}
+                    )
                     await manager.send_to_task_subscribers(
                         task.id,
                         WebSocketMessage(
@@ -240,6 +246,12 @@ class TaskProcessor:
                         if message_content:
                             content_chunks.append(message_content)
                             sample.content = "\n\n".join(content_chunks[-20:])
+                            # 持久化消息到 Redis
+                            await TaskService.append_message(
+                                task.id,
+                                sample.id,
+                                {"content": f"[样本 {sample_index + 1}] {message_content}", "role": event.get("role"), "tool_calls": event.get("tool_calls")}
+                            )
                             # 发送样本特定的消息
                             await manager.send_to_task_subscribers(
                                 task.id,

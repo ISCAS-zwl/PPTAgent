@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from typing import List
+from typing import List, Dict, Any
 import uuid
 from app.models.task import (
     Task,
@@ -101,3 +101,25 @@ async def update_task(task_id: str, updates: dict):
 
     await TaskService.update_task(task_id, filtered_updates)
     return {"status": "updated", "task_id": task_id}
+
+
+@router.get("/task/{task_id}/messages")
+async def get_task_messages(task_id: str) -> Dict[str, List[Dict[str, Any]]]:
+    """获取任务的完整消息历史"""
+    task = await TaskService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    messages = await TaskService.get_all_messages(task_id)
+    return messages
+
+
+@router.get("/task/{task_id}/messages/{sample_id}")
+async def get_sample_messages(task_id: str, sample_id: str) -> List[Dict[str, Any]]:
+    """获取特定样本的消息历史"""
+    task = await TaskService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    messages = await TaskService.get_messages(task_id, sample_id)
+    return messages

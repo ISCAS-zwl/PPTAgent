@@ -89,12 +89,15 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
             <div className="space-y-2">
               {syntaxNode}
               <div className="rounded-lg border border-gray-700 overflow-hidden bg-black">
-                <iframe
-                  src={previewUrl}
-                  className="w-full h-80 border-0 bg-white"
-                  sandbox="allow-scripts"
-                  title={`slide-preview-${htmlPath}`}
-                />
+                <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                  <iframe
+                    src={previewUrl}
+                    className="absolute top-0 left-0 w-full h-full border-0 bg-white"
+                    sandbox="allow-scripts allow-same-origin"
+                    title={`slide-preview-${htmlPath}`}
+                    style={{ transform: 'scale(1)', transformOrigin: 'top left' }}
+                  />
+                </div>
                 <div className="px-3 py-2 text-xs text-gray-200 break-all">{htmlPath}</div>
               </div>
             </div>
@@ -145,12 +148,15 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
               {children}
             </div>
             <div className="rounded-lg border border-gray-700 overflow-hidden bg-black">
-              <iframe
-                src={previewUrl}
-                className="w-full h-80 border-0 bg-white"
-                sandbox="allow-scripts"
-                title={`slide-preview-${htmlPath}`}
-              />
+              <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                <iframe
+                  src={previewUrl}
+                  className="absolute top-0 left-0 w-full h-full border-0 bg-white"
+                  sandbox="allow-scripts allow-same-origin"
+                  title={`slide-preview-${htmlPath}`}
+                  style={{ transform: 'scale(1)', transformOrigin: 'top left' }}
+                />
+              </div>
               <div className="px-3 py-2 text-xs text-gray-200 break-all">{htmlPath}</div>
             </div>
           </div>
@@ -377,7 +383,7 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
               <iframe
                 srcDoc={task.artifact.content}
                 className="w-full h-full min-h-[500px] border-0"
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-same-origin"
                 title="Preview"
               />
             )}
@@ -503,12 +509,15 @@ export default function ArtifactViewer({ task }: ArtifactViewerProps) {
                             key={`${link}-${idx}`}
                             className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-black"
                           >
-                            <iframe
-                              src={link}
-                              className="w-full h-64 border-0 bg-white"
-                              sandbox="allow-scripts allow-same-origin"
-                              title={`slide-${idx}`}
-                            />
+                            <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                              <iframe
+                                src={link}
+                                className="absolute top-0 left-0 w-full h-full border-0 bg-white"
+                                sandbox="allow-scripts allow-same-origin"
+                                title={`slide-${idx}`}
+                                style={{ transform: 'scale(1)', transformOrigin: 'top left' }}
+                              />
+                            </div>
                             <div className="px-3 py-2 text-xs bg-gray-900 text-gray-100 break-all">
                               {link}
                             </div>

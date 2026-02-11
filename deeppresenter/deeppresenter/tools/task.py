@@ -1,20 +1,29 @@
 import csv
 import math
+import os
 import re
 import shutil
+import sys
 from pathlib import Path
 from typing import Literal
 
-from appcore import mcp
+from fastmcp import FastMCP
 from filelock import FileLock
 from PIL import Image
 from pptagent_pptx import Presentation
 from pydantic import BaseModel
 
-from deeppresenter.utils.log import error, info, warning
+from deeppresenter.utils.config import DeepPresenterConfig
+from deeppresenter.utils.log import info, set_logger, warning
+
+Image.MAX_IMAGE_PIXELS = None  # only reading metadata, no actual decompression
+
+mcp = FastMCP(name="Task")
+
+CONFIG = DeepPresenterConfig.load_from_file(os.getenv("CONFIG_FILE"))
 
 
-def _rewrite_image_link(match: re.Match[str], md_dir: Path) -> str:
+def _rewrite_image_link(match: re.Match[str], md_dir: Path, task_id: str = None) -> str:
     alt_text = match.group(1)
     target = match.group(2).strip()
     if not target:
@@ -39,10 +48,31 @@ def _rewrite_image_link(match: re.Match[str], md_dir: Path) -> str:
             ratio = f"{width // factor}:{height // factor}"
             updated_alt = f"{updated_alt}, {ratio}" if updated_alt else ratio
     except OSError:
-        pass
+        warning(f"Failed to get image size for {p}")
 
-    # ? since slides were placed in an independent folder, we convert image path to absolute path to avoid broken links
-    new_path = p.resolve().as_posix()
+    # Convert image path to API URL for frontend access
+    # If task_id is provided, use API endpoint; otherwise fall back to absolute path
+    if task_id:
+        # Get relative path from workspace root
+        try:
+            # Try to find the relative path from the task directory
+            abs_path = p.resolve()
+            # Extract the relative path after the task_id directory
+            path_parts = abs_path.parts
+            if task_id in path_parts:
+                task_idx = path_parts.index(task_id)
+                relative_path = "/".join(path_parts[task_idx + 1:])
+                new_path = f"/api/preview/asset/{task_id}/{relative_path}"
+            else:
+                # Fallback to absolute path if task_id not found in path
+                new_path = abs_path.as_posix()
+        except Exception as e:
+            warning(f"Failed to convert image path to API URL: {e}")
+            new_path = p.resolve().as_posix()
+    else:
+        # Fallback to absolute path for backward compatibility
+        new_path = p.resolve().as_posix()
+
     return f"![{updated_alt}]({new_path}{rest})"
 
 
@@ -118,8 +148,7 @@ def todo_update(
         str: Confirmation message with the updated todo's ID
     """
     todos = _load_todos()
-    if idx < 0 or idx >= len(todos):
-        return f"Invalid todo index: {idx}"
+    assert 0 <= idx < len(todos), f"Invalid todo index: {idx}"
 
     if todo_content is not None:
         todos[idx].content = todo_content
@@ -171,29 +200,40 @@ def finalize(outcome: str, agent_name: str = "") -> str:
     """
     # here we conduct some final checks on agent's outcome
     path = Path(outcome)
-    if not path.exists():
-        return f"Outcome {outcome} does not exist"
+    assert path.exists(), f"Outcome {outcome} does not exist"
+
+    # Extract task_id from the current working directory
+    task_id = None
+    try:
+        cwd = Path.cwd()
+        # Task ID is typically the last directory in the path (e.g., /workspace/20260203/de59c0d0)
+        task_id = cwd.name
+    except Exception as e:
+        warning(f"Failed to extract task_id from working directory: {e}")
+
     if agent_name == "Research":
         md_dir = path.parent
-        if not (path.is_file() and path.suffix == ".md"):
-            return "Outcome file should be a markdown file"
+        assert path.suffix == ".md", (
+            f"Outcome file should be a markdown file, got {path.suffix}"
+        )
         with open(path, encoding="utf-8") as f:
             content = f.read()
 
         try:
             content = re.sub(
                 r"!\[(.*?)\]\((.*?)\)",
-                lambda match: _rewrite_image_link(match, md_dir),
+                lambda match: _rewrite_image_link(match, md_dir, task_id),
                 content,
             )
             shutil.copyfile(path, md_dir / ("." + path.name))
             path.write_text(content, encoding="utf-8")
         except Exception as e:
-            error(f"Failed to rewrite image links: {e}")
+            warning(f"Failed to rewrite image links: {e}")
 
     elif agent_name == "PPTAgent":
-        if not (path.is_file() and path.suffix == ".pptx"):
-            return "Outcome file should be a pptx file"
+        assert path.is_file() and path.suffix == ".pptx", (
+            f"Outcome file should be a pptx file, got {path.suffix}"
+        )
         prs = Presentation(str(path))
         if len(prs.slides) <= 0:
             return "PPTX file should contain at least one slide"
@@ -203,6 +243,15 @@ def finalize(outcome: str, agent_name: str = "") -> str:
             return "Outcome path should be a directory containing HTML files"
         if not all(f.stem.startswith("slide_") for f in html_files):
             return "All HTML files should start with 'slide_'"
+
+        # Rewrite image paths in HTML files to use API endpoints
+        if task_id:
+            try:
+                for html_file in html_files:
+                    _rewrite_html_image_paths(html_file, task_id)
+                info(f"Rewrote image paths in {len(html_files)} HTML files")
+            except Exception as e:
+                warning(f"Failed to rewrite HTML image paths: {e}")
     else:
         warning(f"Unverifiable agent: {agent_name}")
 
@@ -213,3 +262,68 @@ def finalize(outcome: str, agent_name: str = "") -> str:
 
     info(f"Agent {agent_name} finalized the outcome: {outcome}")
     return outcome
+
+
+def _rewrite_html_image_paths(html_file: Path, task_id: str) -> None:
+    """Rewrite absolute image paths in HTML files to use API endpoints.
+
+    Args:
+        html_file: Path to the HTML file
+        task_id: Task ID for constructing API URLs
+    """
+    with open(html_file, encoding="utf-8") as f:
+        content = f.read()
+
+    # Pattern to match img src attributes with absolute paths
+    # Matches: <img src="/opt/workspace/..." or src="/workspace/..."
+    def replace_img_src(match):
+        full_match = match.group(0)
+        src_value = match.group(1)
+
+        # Only process absolute file system paths
+        if not (src_value.startswith("/opt/workspace") or src_value.startswith("/workspace")):
+            return full_match
+
+        # Extract relative path from the task directory
+        try:
+            src_path = Path(src_value)
+            path_parts = src_path.parts
+
+            # Find task_id in the path
+            if task_id in path_parts:
+                task_idx = path_parts.index(task_id)
+                relative_path = "/".join(path_parts[task_idx + 1:])
+                new_src = f"/api/preview/asset/{task_id}/{relative_path}"
+                return f'src="{new_src}"'
+        except Exception as e:
+            warning(f"Failed to convert image path {src_value}: {e}")
+
+        return full_match
+
+    # Replace img src attributes
+    content = re.sub(
+        r'src="([^"]+)"',
+        replace_img_src,
+        content
+    )
+
+    # Also handle single quotes
+    content = re.sub(
+        r"src='([^']+)'",
+        lambda m: replace_img_src(m).replace('"', "'") if replace_img_src(m) != m.group(0) else m.group(0),
+        content
+    )
+
+    # Write back to file
+    with open(html_file, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+if __name__ == "__main__":
+    assert len(sys.argv) == 2, "Usage: python task.py <workspace>"
+    work_dir = Path(sys.argv[1])
+    assert work_dir.exists(), f"Workspace {work_dir} does not exist."
+    os.chdir(work_dir)
+    set_logger(f"task-{work_dir.stem}", work_dir / ".history" / "task.log")
+
+    mcp.run(show_banner=False)

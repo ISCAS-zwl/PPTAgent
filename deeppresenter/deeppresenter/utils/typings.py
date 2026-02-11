@@ -22,10 +22,10 @@ from deeppresenter.utils.log import debug, warning
 class MCPServer(BaseModel):
     """MCP server config model, matches each entry in mcp.json"""
 
-    name: str
+    name: str | None = None
     description: str | None = None
-    command: str | None = None
-    args: list[str] = Field(default_factory=list)
+    command: str
+    args: list[str]
     env: dict[str, str] = Field(default_factory=dict)
     url: str | None = None
     header: dict[str, str] | None = None
@@ -42,8 +42,7 @@ class MCPServer(BaseModel):
                 )
         self.args = [self._process_text(arg) for arg in self.args]
         for k, v in self.env.items():
-            # Only process if the whole value is an env variable
-            if k == v:
+            if "$" in v:
                 self.env[k] = self._process_text(v)
         if self.url:
             self.url = self._process_text(self.url)
@@ -76,10 +75,11 @@ class ChatMessage(BaseModel):
     role: Role
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     content: None | str | list[dict]
-    reasoning_content: None | str = None
+    reasoning: None | str = None
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     # This attribute mark if function call failed to execute
     is_error: bool = False
+    cost: CompletionUsage | None = None
     from_tool: Function | None = None
     tool_call_id: str | None = None
     tool_calls: list[ChatCompletionMessageFunctionToolCall] | None = None
@@ -99,19 +99,14 @@ class ChatMessage(BaseModel):
     @property
     def text(self):
         texts = []
-        if isinstance(self.content, str) and self.content.strip():
-            texts.append(self.content)
-        elif isinstance(self.content, list) and len(self.content):
-            for block in self.content:
-                if block["type"] == "text":
-                    texts.append(block["text"])
-                elif block["type"] == "image_url":
-                    texts.append("<image>")
-        elif len(self.tool_calls or []):
-            for t in self.tool_calls:
-                texts.append(t.function.model_dump_json())
+        assert isinstance(self.content, list), "content must be a list"
+        for block in self.content:
+            if block["type"] == "text":
+                texts.append(block["text"])
+            elif block["type"] == "image_url":
+                texts.append("<image>")
 
-        texts.extend([t.function for t in self.tool_calls or []])
+        texts.extend([t.function.model_dump_json() for t in self.tool_calls or []])
         if len(texts) == 0:
             return ""
         elif len(texts) == 1:
@@ -127,16 +122,27 @@ class ChatMessage(BaseModel):
         return False
 
 
+class ToolSet(BaseModel):
+    include_tool_servers: list[str] | Literal["all"] = "all"
+    exclude_tool_servers: list[str] = []
+    include_tools: list[str] = []
+    exclude_tools: list[str] = []
+
+    def __add__(self, other: "RoleConfig"):
+        self.include_tool_servers.extend(other.toolset.include_tool_servers)
+        self.exclude_tool_servers.extend(other.toolset.exclude_tool_servers)
+        self.include_tools.extend(other.toolset.include_tools)
+        self.exclude_tools.extend(other.toolset.exclude_tools)
+        return self
+
+
 class RoleConfig(BaseModel):
     """Role configuration model"""
 
     system: dict[str, str]
     instruction: str
     use_model: str
-    include_tool_servers: list[str] | Literal["all"] = "all"
-    exclude_tool_servers: list[str] = []
-    include_tools: list[str] = []
-    exclude_tools: list[str] = []
+    toolset: ToolSet
 
 
 class Cost(BaseModel):
@@ -164,6 +170,9 @@ class PowerPointType(StrEnum):
     WIDE_SCREEN = "16:9"
     STANDARD_SCREEN = "4:3"
     POSTER = "A1"
+    POSTER_A3 = "A3"
+    POSTER_A2 = "A2"
+    POSTER_A4 = "A4"
 
 
 class InputRequest(BaseModel):
@@ -180,16 +189,13 @@ class InputRequest(BaseModel):
         if not self.attachments:
             return
         (workspace / "attachments").mkdir(parents=True, exist_ok=True)
-        new_attachments = []
         for att in self.attachments:
             assert os.path.exists(att), f"Attachment {att} does not exist"
-            dest_path = workspace / "attachments" / Path(att).name
-            if dest_path.exists():
+            dst_path = workspace / "attachments" / Path(att).name
+            if dst_path.exists():
                 warning(f"Attachment {att} already exists in workspace")
                 continue
-            shutil.copy(att, str(dest_path))
-            new_attachments.append(str(dest_path))
-        self.attachments = new_attachments
+            shutil.copy(att, str(dst_path))
 
     @property
     def task_id(self):

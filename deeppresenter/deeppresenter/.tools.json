@@ -1,34 +1,20 @@
 {
   "server_tools": {
-    "deeppresenter": [
-      "convert_to_markdown",
-      "inspect_slide",
-      "inspect_manuscript",
-      "todo_create",
-      "todo_update",
-      "todo_list",
-      "thinking",
-      "finalize",
-      "image_caption",
-      "document_summary",
-      "fetch_url",
-      "download_file",
+    "research": [
       "search_papers",
       "get_paper_authors",
-      "get_scholar_details",
+      "get_scholar_details"
+    ],
+    "search": [
       "search_web",
-      "search_images"
+      "search_images",
+      "fetch_url",
+      "download_file"
     ],
-    "pptagent": [
-      "markdown_table_to_image",
-      "list_templates",
-      "set_template",
-      "create_slide",
-      "write_slide",
-      "generate_slide",
-      "save_generated_slides"
+    "any2markdown": [
+      "convert_to_markdown"
     ],
-    "desktop_commander": [
+    "sandbox": [
       "read_file",
       "write_file",
       "move_file",
@@ -36,256 +22,25 @@
       "create_directory",
       "list_directory",
       "execute_command"
+    ],
+    "task": [
+      "todo_create",
+      "todo_update",
+      "todo_list",
+      "thinking",
+      "finalize"
+    ],
+    "tool_agents": [
+      "image_generation",
+      "image_caption",
+      "document_summary"
+    ],
+    "deeppresenter": [
+      "inspect_slide",
+      "inspect_manuscript"
     ]
   },
   "tool_specs": [
-    {
-      "type": "function",
-      "function": {
-        "name": "convert_to_markdown",
-        "description": "Convert a file to markdown, it could accept pdf, docx, doc, etc.\nArgs:\n    file_path: The path of the file to be converted\n    output_folder: The folder to save the converted markdown and images, should be empty or not exist\n\nReturns:\n    The converted results, with file saved to the specified path",
-        "parameters": {
-          "properties": {
-            "file_path": {
-              "type": "string"
-            },
-            "output_folder": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "file_path",
-            "output_folder"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "inspect_slide",
-        "description": "Read the HTML file as an image.\n\nReturns:\n    ImageContent: The slide as an image content\n    str: Error message if inspection fails",
-        "parameters": {
-          "properties": {
-            "html_file": {
-              "type": "string"
-            },
-            "aspect_ratio": {
-              "default": "16:9",
-              "enum": [
-                "16:9",
-                "4:3",
-                "A1"
-              ],
-              "type": "string"
-            }
-          },
-          "required": [
-            "html_file"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "inspect_manuscript",
-        "description": "Inspect the markdown manuscript for general statistics and image asset validation.\nArgs:\n    md_file (str): The path to the markdown file",
-        "parameters": {
-          "properties": {
-            "md_file": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "md_file"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "todo_create",
-        "description": "Create a new todo item and add it to the todo list.\n\nArgs:\n    todo_content (str): The content/description of the todo item\n\nReturns:\n    str: Confirmation message with the created todo's ID",
-        "parameters": {
-          "properties": {
-            "todo_content": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "todo_content"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "todo_update",
-        "description": "Update an existing todo item's content or status.\n\nArgs:\n    idx (int): The index of the todo item to update\n    todo_content (str, optional): New content for the todo item\n    status (Literal[\"completed\", \"in_progress\", \"skipped\"], optional): New status for the todo item\n\nReturns:\n    str: Confirmation message with the updated todo's ID",
-        "parameters": {
-          "properties": {
-            "idx": {
-              "type": "integer"
-            },
-            "todo_content": {
-              "default": null,
-              "type": "string"
-            },
-            "status": {
-              "default": null,
-              "enum": [
-                "completed",
-                "in_progress",
-                "skipped"
-              ],
-              "type": "string"
-            }
-          },
-          "required": [
-            "idx"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "todo_list",
-        "description": "Get the current todo list or check if all todos are completed.\n\nReturns:\n    str | list[Todo]: Either a completion message if all todos are done/skipped,\n                     or the current list of todo items",
-        "parameters": {
-          "properties": {},
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "thinking",
-        "description": "This tool is for explicitly reasoning about the current task state and next actions.",
-        "parameters": {
-          "properties": {
-            "thought": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "thought"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "finalize",
-        "description": "When all tasks are finished, call this function to finalize the loop.\nArgs:\n    outcome (str): The path to the final outcome file or directory.",
-        "parameters": {
-          "properties": {
-            "outcome": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "outcome"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "image_caption",
-        "description": "Generate a caption for the image, including its type and a brief description.\n\nArgs:\n    image_path: The path to the image to caption.\n\nReturns:\n    The caption and size for the image",
-        "parameters": {
-          "properties": {
-            "image_path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "image_path"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "document_summary",
-        "description": "Generate a report according to the given task and long document.\n\nArgs:\n    task: The specific task or objective for the report\n    document_path: Path to the pure text document to be analyzed, should be endswith like .txt or .md\n\nReturns:\n    A structured summary report in Markdown format based on the task and document content",
-        "parameters": {
-          "properties": {
-            "task": {
-              "type": "string"
-            },
-            "document_path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "task",
-            "document_path"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "fetch_url",
-        "description": "Fetch web page content\n\nArgs:\n    url: Target URL\n    body_only: If True, return only main content; otherwise return full page, default True",
-        "parameters": {
-          "properties": {
-            "url": {
-              "type": "string"
-            },
-            "body_only": {
-              "default": true,
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "url"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "download_file",
-        "description": "Download a file from a URL and save it to a local path.",
-        "parameters": {
-          "properties": {
-            "url": {
-              "type": "string"
-            },
-            "output_file": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "url",
-            "output_file"
-          ],
-          "type": "object"
-        }
-      }
-    },
     {
       "type": "function",
       "function": {
@@ -428,24 +183,42 @@
     {
       "type": "function",
       "function": {
-        "name": "markdown_table_to_image",
-        "description": "Convert a markdown table to an image and save it to the specified path.\n\nArgs:\n    markdown_table (str): The markdown table content to convert\n    path (str): The file path where the image will be saved\n    css (str): Custom CSS styles for the table. Use class selectors\n                        (table, thead, th, td) to style the table elements. Avoid\n                        changing background colors outside the table area.\n\nReturns:\n    str: Confirmation message with the path to the saved image",
+        "name": "fetch_url",
+        "description": "Fetch web page content\n\nArgs:\n    url: Target URL\n    body_only: If True, return only main content; otherwise return full page, default True",
         "parameters": {
           "properties": {
-            "markdown_table": {
+            "url": {
               "type": "string"
             },
-            "path": {
+            "body_only": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "download_file",
+        "description": "Download a file from a URL and save it to a local path.",
+        "parameters": {
+          "properties": {
+            "url": {
               "type": "string"
             },
-            "css": {
+            "output_file": {
               "type": "string"
             }
           },
           "required": [
-            "markdown_table",
-            "path",
-            "css"
+            "url",
+            "output_file"
           ],
           "type": "object"
         }
@@ -454,94 +227,20 @@
     {
       "type": "function",
       "function": {
-        "name": "list_templates",
-        "description": "List all available templates.",
-        "parameters": {
-          "properties": {},
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "set_template",
-        "description": "Select a PowerPoint template by name.\n\nArgs:\n    template_name: The name of the template to select\n\nReturns:\n    dict: Success message and list of available layouts",
+        "name": "convert_to_markdown",
+        "description": "Convert a file to markdown, it could accept pdf, docx, doc, etc.\nArgs:\n    file_path: The path of the file to be converted\n    output_folder: The folder to save the converted markdown and images, should be empty or not exist\n\nReturns:\n    The converted results, with file saved to the specified path",
         "parameters": {
           "properties": {
-            "template_name": {
-              "default": "default",
+            "file_path": {
               "type": "string"
-            }
-          },
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "create_slide",
-        "description": "Create a slide with a given layout.\n\nArgs:\n    layout: Name of the layout to use. Must be one of the available layouts given by set_template.\n\nReturns:\n    dict: Success message, instructions, and content schema for the selected layout.",
-        "parameters": {
-          "properties": {
-            "layout": {
+            },
+            "output_folder": {
               "type": "string"
             }
           },
           "required": [
-            "layout"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "write_slide",
-        "description": "Write the slide elements for generating a PowerPoint slide.\nNote that this function will not generate a slide, you should call `generate_slide`.\n\nArgs:\n    structured_slide_elements: List of slide elements with their content\n    should follow the content schema and adhere to\n    [\n        {\n            \"name\": \"element_name\",\n            \"data\": [\"content1\", \"content2\", \"...\"]\n            // Array of strings for text elements\n            // OR array of image paths for image elements: [\"/path/to/image1.jpg\", \"/path/to/image2.png\"]\n        }\n    ]\nReturns:\n    dict: Success message, warnings, and errors",
-        "parameters": {
-          "properties": {
-            "structured_slide_elements": {
-              "items": {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "structured_slide_elements"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "generate_slide",
-        "description": "Generate a PowerPoint slide after layout and slide elements are set.\n\nReturns:\n    dict: Success message with slide number and next steps",
-        "parameters": {
-          "properties": {},
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "save_generated_slides",
-        "description": "Save the generated slides to a PowerPoint file.\n\nArgs:\n    pptx_path: The path to save the PowerPoint file",
-        "parameters": {
-          "properties": {
-            "pptx_path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "pptx_path"
+            "file_path",
+            "output_folder"
           ],
           "type": "object"
         }
@@ -723,6 +422,220 @@
           "required": [
             "command"
           ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "todo_create",
+        "description": "Create a new todo item and add it to the todo list.\n\nArgs:\n    todo_content (str): The content/description of the todo item\n\nReturns:\n    str: Confirmation message with the created todo's ID",
+        "parameters": {
+          "properties": {
+            "todo_content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "todo_content"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "todo_update",
+        "description": "Update an existing todo item's content or status.\n\nArgs:\n    idx (int): The index of the todo item to update\n    todo_content (str, optional): New content for the todo item\n    status (Literal[\"completed\", \"in_progress\", \"skipped\"], optional): New status for the todo item\n\nReturns:\n    str: Confirmation message with the updated todo's ID",
+        "parameters": {
+          "properties": {
+            "idx": {
+              "type": "integer"
+            },
+            "todo_content": {
+              "default": null,
+              "type": "string"
+            },
+            "status": {
+              "default": null,
+              "enum": [
+                "completed",
+                "in_progress",
+                "skipped"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "idx"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "todo_list",
+        "description": "Get the current todo list or check if all todos are completed.\n\nReturns:\n    str | list[Todo]: Either a completion message if all todos are done/skipped,\n                     or the current list of todo items",
+        "parameters": {
+          "properties": {},
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "thinking",
+        "description": "This tool is for explicitly reasoning about the current task state and next actions.",
+        "parameters": {
+          "properties": {
+            "thought": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "thought"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "finalize",
+        "description": "When all tasks are finished, call this function to finalize the loop.\nArgs:\n    outcome (str): The path to the final outcome file or directory.",
+        "parameters": {
+          "properties": {
+            "outcome": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "outcome"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "image_generation",
+        "description": "Generate an image and save it to the specified path.\n\nArgs:\n    prompt: Text description of the image to generate. Should be detailed and specific, but do not include aspect ratio.\n    width: Width of the image, in pixels\n    height: Height of the image, in pixels\n    path: Full path where the image should be saved",
+        "parameters": {
+          "properties": {
+            "prompt": {
+              "type": "string"
+            },
+            "width": {
+              "type": "integer"
+            },
+            "height": {
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt",
+            "width",
+            "height",
+            "path"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "image_caption",
+        "description": "Generate a caption for the image, including its type and a brief description.\n\nArgs:\n    image_path: The path to the image to caption.\n\nReturns:\n    The caption and size for the image",
+        "parameters": {
+          "properties": {
+            "image_path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "image_path"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "document_summary",
+        "description": "Generate a report according to the given task and long document.\n\nArgs:\n    task: The specific task or objective for the report\n    document_path: Path to the pure text document to be analyzed.\n\nReturns:\n    A structured summary report in Markdown format based on the task and document content",
+        "parameters": {
+          "properties": {
+            "task": {
+              "type": "string"
+            },
+            "document_path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "task",
+            "document_path"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_slide",
+        "description": "Read the HTML file as an image.\n\nReturns:\n    ImageContent: The slide as an image content\n    str: Error message if inspection fails",
+        "parameters": {
+          "properties": {
+            "html_file": {
+              "type": "string"
+            },
+            "aspect_ratio": {
+              "default": "16:9",
+              "enum": [
+                "16:9",
+                "4:3",
+                "A1",
+                "A2",
+                "A3",
+                "A4"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "html_file"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_manuscript",
+        "description": "Inspect the markdown manuscript for general statistics and image asset validation.\nArgs:\n    md_file (str): The path to the markdown file",
+        "parameters": {
+          "properties": {
+            "md_file": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "md_file"
+          ],
+          "type": "object"
         }
       }
     }

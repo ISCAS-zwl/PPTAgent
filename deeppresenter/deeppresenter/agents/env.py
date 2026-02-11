@@ -21,6 +21,7 @@ from deeppresenter.utils.constants import (
     CUTOFF_WARNING,
     LOGGING_LEVEL,
     MCP_CALL_TIMEOUT,
+    PACKAGE_DIR,
     TOOL_CACHE,
     TOOL_CUTOFF_LEN,
     WORKSPACE_BASE,
@@ -29,7 +30,6 @@ from deeppresenter.utils.log import (
     debug,
     error,
     info,
-    set_logger,
     timer,
     warning,
 )
@@ -76,7 +76,9 @@ class AgentEnv:
             "WORKSPACE": str(self.workspace),
             "HOST_WORKSPACE": host_workspace,
             "WORKSPACE_ID": self.workspace.stem,
-            "LLM_CONFIG_FILE": str(config.file_path),
+            "CONFIG_FILE": str(config.file_path),
+            "FASTMCP_LOG_LEVEL": "CRITICAL",
+            "PACKAGE_DIR": str(PACKAGE_DIR),
         }
         if config.offline_mode:
             envs["OFFLINE_MODE"] = "1"
@@ -87,7 +89,7 @@ class AgentEnv:
         self._server_tools = defaultdict(list)
         self._tool_to_server = {}
         self.tool_history: list[tuple[ToolCall, ChatMessage]] = []
-        self.tool_history_file = self.workspace / "history" / "tool_history.jsonl"
+        self.tool_history_file = self.workspace / ".history" / "tool_history.jsonl"
 
     async def tool_execute(
         self,
@@ -147,7 +149,7 @@ class AgentEnv:
         else:
             self.timing_dict[tool_call.function.name].success_count += 1
 
-        if len(result.content) != 1 and any(
+        if len(result.content) != 1 or any(
             c.type not in ["image", "text"] for c in result.content
         ):
             raise ValueError("Only one text/image block is supported currently.")
@@ -215,38 +217,9 @@ class AgentEnv:
             sys.exit(1)
 
         with timer("Connecting MCP servers"):
-            connect_tasks = []
-            server_configs = []
-
-            for server in self.mcp_configs:
-                name = server.name
-                connect_tasks.append(self.client.connect_server(name, server))
-                keep_tools = server.keep_tools
-                exclude_tools = set(server.exclude_tools)
-                server_configs.append((name, keep_tools, exclude_tools))
-
-            # Connect to all servers in parallel
-            await asyncio.gather(*connect_tasks)
-
-            # Update tools for each connected server
-            for name, keep_tools, exclude_tools in server_configs:
-                info(f"Connected to server {name}")
-                tools_dict = await self.client.list_tools(name)
-                for tool_name, tool_info in tools_dict.items():
-                    if (
-                        keep_tools is None or tool_name in keep_tools
-                    ) and tool_name not in exclude_tools:
-                        tool = {
-                            "type": "function",
-                            "function": {
-                                "name": tool_name,
-                                "description": tool_info.description,
-                                "parameters": tool_info.inputSchema,
-                            },
-                        }
-                        self._tools_dict[tool_name] = tool
-                        self._server_tools[name].append(tool_name)
-                        self._tool_to_server[tool_name] = name
+            await asyncio.gather(
+                *[self.connect_server(server) for server in self.mcp_configs]
+            )
 
         if LOGGING_LEVEL <= logging.INFO:
             debug(
@@ -266,7 +239,8 @@ class AgentEnv:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Clean up all MCP connections and resources"""
-        await self.client.cleanup()
+        for server_name in list(self._server_tools.keys()):
+            await self.disconnect_server(server_name)
         self.tool_history_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.tool_history_file, "a", encoding="utf-8") as f:
             for tool_call, msg in self.tool_history:
@@ -276,7 +250,7 @@ class AgentEnv:
                     )
                     + "\n"
                 )
-        with (self.workspace / "history" / "tools_time_cost.json").open(
+        with (self.workspace / ".history" / "tools_time_cost.json").open(
             "w", encoding="utf-8"
         ) as f:
             timing_data = {
@@ -297,39 +271,45 @@ class AgentEnv:
             f"Agent Environment exited successfully, interaction history saved to: {self.tool_history_file}."
         )
 
-    def get_server_tools(self, server_id: str):
+    async def connect_server(self, server: MCPServer):
+        """Connect to a single MCP server and register its tools."""
+        name = server.name
+        await self.client.connect_server(name, server)
+        info(f"Connected to server {name}")
+
+        keep_tools = server.keep_tools
+        exclude_tools = set(server.exclude_tools)
+
+        tools_dict = await self.client.list_tools(name)
+        for tool_name, tool_info in tools_dict.items():
+            if (
+                keep_tools is None or tool_name in keep_tools
+            ) and tool_name not in exclude_tools:
+                tool = {
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "description": tool_info.description,
+                        "parameters": tool_info.inputSchema,
+                    },
+                }
+                self._tools_dict[tool_name] = tool
+                self._server_tools[name].append(tool_name)
+                self._tool_to_server[tool_name] = name
+
+    async def disconnect_server(self, server_name: str):
+        """Disconnect a single MCP server and clean up its tools."""
+        if server_name not in self._server_tools:
+            return
+        for tool_name in self._server_tools[server_name]:
+            self._tools_dict.pop(tool_name, None)
+            self._tool_to_server.pop(tool_name, None)
+        del self._server_tools[server_name]
+        await self.client._close_server(server_name)
+        info(f"Disconnected from server {server_name}")
+
+    def get_server_tools(self, server_name: str):
         tools = []
-        for tool_name in self._server_tools[server_id]:
+        for tool_name in self._server_tools[server_name]:
             tools.append(self._tools_dict[tool_name])
         return tools
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    from openai.types.chat.chat_completion_message_tool_call import Function
-
-    set_logger("mcp manager")
-
-    async def main():
-        workspace = Path("/opt/workspace/test")
-        workspace.mkdir(exist_ok=True)
-        async with AgentEnv(workspace) as tool_execute:
-            result = await tool_execute.tool_execute(
-                ToolCall(
-                    function=Function(
-                        name="convert_to_markdown",
-                        arguments=json.dumps(
-                            {
-                                "file_path": "/Users/forcelss/Code/PPTea/data/arxiv/0706.0028.pdf",
-                                "output_folder": "/Users/forcelss/Code/PPTea/test_output",
-                            }
-                        ),
-                    ),
-                    id="test-tool-call-001",
-                    type="function",
-                )
-            )
-            print(result)
-
-    asyncio.run(main())
