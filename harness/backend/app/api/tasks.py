@@ -1,0 +1,126 @@
+from fastapi import APIRouter, HTTPException
+from typing import List, Dict, Any
+import uuid
+from app.models.task import (
+    Task,
+    Sample,
+    CreateTaskRequest,
+    CreateTaskResponse,
+    TaskStatus,
+)
+from app.services.task_service import TaskService
+from app.tasks.task_processor import task_queue
+from app.core.config import settings
+
+router = APIRouter(prefix="/api", tags=["tasks"])
+
+
+@router.post("/task/create", response_model=CreateTaskResponse)
+async def create_task(request: CreateTaskRequest):
+    """创建新任务"""
+    # 验证样本数量
+    if request.sample_count > settings.max_sample_count:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Sample count exceeds maximum of {settings.max_sample_count}",
+        )
+
+    # 生成任务 ID
+    task_id = str(uuid.uuid4())
+
+    # 创建样本
+    samples = [
+        Sample(
+            id=f"{task_id}-sample-{i}",
+            status=TaskStatus.IDLE,
+        )
+        for i in range(request.sample_count)
+    ]
+
+    # 创建任务对象
+    task = Task(
+        id=task_id,
+        prompt=request.prompt,
+        status=TaskStatus.IDLE,
+        samples=samples,
+        options=request.options or {},
+        pages=request.pages,
+        aspect_ratio=request.aspect_ratio,
+        output_type=request.output_type,
+        uploaded_file_id=request.uploaded_file_id,
+    )
+
+    # 保存到 Redis
+    await TaskService.create_task(task)
+
+    # 添加到任务队列
+    await task_queue.put(task)
+
+    return CreateTaskResponse(task_id=task_id, status="created")
+
+
+@router.get("/task/{task_id}", response_model=Task)
+async def get_task(task_id: str):
+    """获取任务详情"""
+    task = await TaskService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+@router.get("/tasks", response_model=List[Task])
+async def list_tasks(limit: int = 50):
+    """列出所有任务"""
+    tasks = await TaskService.list_tasks(limit)
+    return tasks
+
+
+@router.delete("/task/{task_id}")
+async def delete_task(task_id: str):
+    """删除任务"""
+    task = await TaskService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    await TaskService.delete_task(task_id)
+    return {"status": "deleted", "task_id": task_id}
+
+
+@router.patch("/task/{task_id}")
+async def update_task(task_id: str, updates: dict):
+    """更新任务（支持重命名等）"""
+    task = await TaskService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # 只允许更新特定字段
+    allowed_fields = {"prompt"}
+    filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+
+    if not filtered_updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    await TaskService.update_task(task_id, filtered_updates)
+    return {"status": "updated", "task_id": task_id}
+
+
+@router.get("/task/{task_id}/messages")
+async def get_task_messages(task_id: str) -> Dict[str, List[Dict[str, Any]]]:
+    """获取任务的完整消息历史"""
+    task = await TaskService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    messages = await TaskService.get_all_messages(task_id)
+    return messages
+
+
+@router.get("/task/{task_id}/messages/{sample_id}")
+async def get_sample_messages(task_id: str, sample_id: str) -> List[Dict[str, Any]]:
+    """获取特定样本的消息历史"""
+    task = await TaskService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    messages = await TaskService.get_messages(task_id, sample_id)
+    return messages
