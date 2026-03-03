@@ -10,22 +10,15 @@ from typing import Literal
 from fastmcp import FastMCP
 from mcp.types import ImageContent
 from pptagent.model_utils import _get_lid_model
-from pptagent.utils import ppt_to_images
 
 from deeppresenter.utils.config import DeepPresenterConfig
-from deeppresenter.utils.log import error, set_logger
-from deeppresenter.utils.webview import convert_html_to_pptx
+from deeppresenter.utils.log import info, set_logger
+from deeppresenter.utils.webview import PlaywrightConverter, convert_html_to_pptx
 
 mcp = FastMCP("DeepPresenter")
 CONFIG = DeepPresenterConfig.load_from_file(os.getenv("CONFIG_FILE"))
-LID_MODEL = None
-
-
-def _get_cached_lid_model():
-    global LID_MODEL
-    if LID_MODEL is None:
-        LID_MODEL = _get_lid_model()
-    return LID_MODEL
+LID_MODEL = _get_lid_model()
+REFLECTIVE_DESIGN = CONFIG.design_agent.is_multimodal and CONFIG.heavy_reflect
 
 
 @mcp.tool()
@@ -45,18 +38,18 @@ async def inspect_slide(
         f"HTML path {html_path} does not exist or is not an HTML file"
     )
     try:
-        pptx_path = await convert_html_to_pptx(html_path, aspect_ratio=aspect_ratio)
+        await convert_html_to_pptx(html_path, aspect_ratio=aspect_ratio)
     except Exception as e:
         return e
 
-    if CONFIG.design_agent.is_multimodal and CONFIG.heavy_reflect:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            output_dir = Path(tmp_dir)
-            await ppt_to_images(str(pptx_path), str(output_dir))
-            image_path = output_dir / "slide_0001.jpg"
-            if not image_path.exists():
-                error(f"Image not found: {image_path}")
-            image_data = image_path.read_bytes()
+    if REFLECTIVE_DESIGN:
+        pdf_path = Path(tempfile.mkdtemp()) / "slide.pdf"
+        async with PlaywrightConverter() as converter:
+            image_dir = await converter.convert_to_pdf(
+                [html_path], pdf_path, aspect_ratio
+            )
+        image_path = image_dir / "slide_01.jpg"
+        image_data = image_path.read_bytes()
         base64_data = (
             f"data:image/jpeg;base64,{base64.b64encode(image_data).decode('utf-8')}"
         )
@@ -131,5 +124,8 @@ if __name__ == "__main__":
     assert work_dir.exists(), f"Workspace {work_dir} does not exist."
     os.chdir(work_dir)
     set_logger(f"task-{work_dir.stem}", work_dir / ".history" / "task.log")
+
+    if REFLECTIVE_DESIGN:
+        info("Reflective Design is enabled.")
 
     mcp.run(show_banner=False)

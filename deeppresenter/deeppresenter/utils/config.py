@@ -43,7 +43,7 @@ def get_json_from_response(response: str) -> dict | list:
     response = response.strip()
     try:
         return json.loads(response)
-    except:
+    except Exception:
         pass
 
     # Try to find JSON by looking for matching braces
@@ -69,24 +69,6 @@ def get_json_from_response(response: str) -> dict | list:
             pass
 
     return json_repair.loads(response)
-
-
-def _align_image_size(width: int, height: int, pixel_multiple: int) -> tuple[int, int]:
-    if pixel_multiple <= 1:
-        return width, height
-
-    g = gcd(width, height)
-    base_w, base_h = width // g, height // g
-
-    k = lcm(
-        pixel_multiple // gcd(pixel_multiple, base_w),
-        pixel_multiple // gcd(pixel_multiple, base_h),
-    )
-    unit_w, unit_h = base_w * k, base_h * k
-
-    scale = max(1, ceil(max(width / unit_w, height / unit_h)))
-
-    return unit_w * scale, unit_h * scale
 
 
 class Endpoint(BaseModel):
@@ -223,13 +205,15 @@ class LLM(BaseModel):
         assert len(self._endpoints) >= 1, "At least one endpoint must be configured"
 
         model_lower = self._endpoints[0].model.lower()
-        if self.is_multimodal is None and any(
-            word in model_lower for word in ("gpt", "claude", "gemini", "vl")
-        ):
-            self.is_multimodal = True
-            debug(
-                f"Model {self._endpoints[0].model} is detected as multimodal model, setting `is_multimodal` to True"
-            )
+        if self.is_multimodal is None:
+            if any(word in model_lower for word in ("gpt", "claude", "gemini", "vl")):
+                self.is_multimodal = True
+                debug(
+                    f"Model {self._endpoints[0].model} is detected as multimodal model, setting `is_multimodal` to True"
+                )
+            else:
+                self.is_multimodal = False
+
         return super().model_post_init(context)
 
     async def run(
@@ -245,9 +229,9 @@ class LLM(BaseModel):
 
         errors = []
         iter_endpoints = cycle(self._endpoints)
-        endpoint = next(iter_endpoints)
         async with self._semaphore:
             for _ in range(retry_times):
+                endpoint = next(iter_endpoints)
                 try:
                     return await endpoint.call(
                         messages,
@@ -258,7 +242,6 @@ class LLM(BaseModel):
                 except (AssertionError, ValidationError) as e:
                     errors.append(f"[{endpoint.model}] {e}")
                 except Exception as e:
-                    endpoint = next(iter_endpoints)
                     errors.append(f"[{endpoint.model}] {e}")
                     if self.secret_logging:
                         identifider = endpoint
@@ -282,7 +265,9 @@ class LLM(BaseModel):
             ratio = (int(self.min_image_size) / (width * height)) ** 0.5
             width = int(width * ratio)
             height = int(height * ratio)
-        width, height = _align_image_size(width, height, pixel_multiple)
+        assert (width % PIXEL_MULTIPLE == 0) and (height % PIXEL_MULTIPLE == 0), (
+            f"Image width and height must be a multiple of {pixel_multiple}"
+        )
         async with self._semaphore:
             errors = []
             random.shuffle(self._endpoints)
@@ -335,14 +320,14 @@ class DeepPresenterConfig(BaseModel):
         description="MCP configuration file", default=PACKAGE_DIR / "mcp.json"
     )
     context_folding: bool = Field(
-        default=False, description="Enable context management and auto summarization"
+        default=True, description="Enable context management and auto summarization"
     )
     context_window: int | None = Field(
         default=None,
         description="Context window for context management, if not set, use the default value",
     )
     max_context_folds: int = Field(
-        default=4, description="Maximum number of folds for context management"
+        default=5, description="Maximum number of folds for context management"
     )
     heavy_reflect: bool = Field(
         default=False,
@@ -398,7 +383,7 @@ class DeepPresenterConfig(BaseModel):
             self.design_agent.validate(),
             self.long_context_model.validate(),
             self.vision_model.validate(),
-            self.t2i_model.validate(),
+            self.t2i_model.validate() if self.t2i_model else asyncio.sleep(0),
         )
 
     def __getitem__(self, key: str) -> Any:

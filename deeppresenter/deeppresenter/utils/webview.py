@@ -97,9 +97,11 @@ class PlaywrightConverter:
             )
             page.on(
                 "console",
-                lambda msg: error_sink.append(f"Console error: {msg.text}")
-                if msg.type == "error"
-                else None,
+                lambda msg: (
+                    error_sink.append(f"Console error: {msg.text}")
+                    if msg.type == "error"
+                    else None
+                ),
             )
         try:
             for html, pdf in zip(sorted(html_files), pdf_files):
@@ -128,17 +130,14 @@ async def convert_html_to_pptx(
     html_inputs: Path | str | Iterable[Path | str],
     output_pptx: Path | str | None = None,
     aspect_ratio: Literal["16:9", "4:3", "A1", "A2", "A3", "A4"] = "16:9",
-) -> Path:
+    soft_parsing: bool = False,
+):
     script_path = PACKAGE_DIR / "html2pptx" / "html2pptx_cli.js"
     if not script_path.exists():
         raise FileNotFoundError(f"html2pptx CLI not found at {script_path}")
 
-    if output_pptx is None:
-        fd, temp_path = tempfile.mkstemp(suffix=".pptx")
-        os.close(fd)
-        output_path = Path(temp_path)
-    else:
-        output_path = Path(output_pptx)
+    validate_only = output_pptx is None
+    output_path = None if validate_only else Path(output_pptx)
 
     html_dir: Path | None = None
     html_files: list[str] = []
@@ -171,8 +170,15 @@ async def convert_html_to_pptx(
     else:
         for html_file in html_files:
             cmd.extend(["--html", html_file])
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    cmd.extend(["--output", str(output_path)])
+
+    if validate_only:
+        cmd.append("--validate")
+    else:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd.extend(["--output", str(output_path)])
+
+    if soft_parsing:
+        cmd.append("--soft")
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
@@ -190,5 +196,3 @@ async def convert_html_to_pptx(
                 "Run `npm install` in the repo root."
             )
         raise RuntimeError(f"html2pptx failed: {details.split('at html2pptx (')[0]}")
-
-    return output_path

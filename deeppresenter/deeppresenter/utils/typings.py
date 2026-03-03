@@ -128,11 +128,14 @@ class ToolSet(BaseModel):
     include_tools: list[str] = []
     exclude_tools: list[str] = []
 
-    def __add__(self, other: "RoleConfig"):
-        self.include_tool_servers.extend(other.toolset.include_tool_servers)
-        self.exclude_tool_servers.extend(other.toolset.exclude_tool_servers)
-        self.include_tools.extend(other.toolset.include_tools)
-        self.exclude_tools.extend(other.toolset.exclude_tools)
+    def __add__(self, other: "ToolSet"):
+        if self.include_tool_servers == "all" or other.include_tool_servers == "all":
+            self.include_tool_servers = "all"
+        else:
+            self.include_tool_servers.extend(other.include_tool_servers)
+        self.exclude_tool_servers.extend(other.exclude_tool_servers)
+        self.include_tools.extend(other.include_tools)
+        self.exclude_tools.extend(other.exclude_tools)
         return self
 
 
@@ -189,13 +192,16 @@ class InputRequest(BaseModel):
         if not self.attachments:
             return
         (workspace / "attachments").mkdir(parents=True, exist_ok=True)
-        for att in self.attachments:
+        new_attachments = [
+            workspace / "attachments" / Path(att).name for att in self.attachments
+        ]
+        for att, dst_path in zip(self.attachments, new_attachments):
             assert os.path.exists(att), f"Attachment {att} does not exist"
-            dst_path = workspace / "attachments" / Path(att).name
             if dst_path.exists():
                 warning(f"Attachment {att} already exists in workspace")
                 continue
-            shutil.copy(att, str(dst_path))
+            shutil.copy(att, dst_path)
+        self.attachments = [str(a) for a in new_attachments]
 
     @property
     def task_id(self):

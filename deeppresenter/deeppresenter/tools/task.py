@@ -47,8 +47,8 @@ def _rewrite_image_link(match: re.Match[str], md_dir: Path, task_id: str = None)
             factor = math.gcd(width, height)
             ratio = f"{width // factor}:{height // factor}"
             updated_alt = f"{updated_alt}, {ratio}" if updated_alt else ratio
-    except OSError:
-        warning(f"Failed to get image size for {p}")
+    except Exception as e:
+        warning(f"Failed to get image size for {p}: {e}")
 
     # Convert image path to API URL for frontend access
     # If task_id is provided, use API endpoint; otherwise fall back to absolute path

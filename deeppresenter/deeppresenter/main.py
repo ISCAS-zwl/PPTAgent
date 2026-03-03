@@ -43,11 +43,13 @@ class AgentLoop:
         self,
         request: InputRequest,
         check_llms: bool = False,
+        soft_parsing: bool = True,
     ) -> AsyncGenerator[str | ChatMessage, None]:
         """Main loop for DeepPresenter generation process.
         Arguments:
             request: InputRequest object containing task details.
             check_llms: Whether to check LLM availability before running.
+            soft_parsing: Whether to use soft parsing on html2pptx.
         Yields:
             ChatMessage or str: Messages or final output path.
         """
@@ -56,7 +58,7 @@ class AgentLoop:
                 "Reflective design requires a multimodal LLM in the design agent, reflection will only enable on textual state."
             )
         if check_llms:
-            self.config.validate_llms()
+            await self.config.validate_llms()
         request.copy_to_workspace(self.workspace)
         with open(self.workspace / ".input_request.json", "w") as f:
             json.dump(request.model_dump(), f, ensure_ascii=False, indent=2)
@@ -157,6 +159,7 @@ class AgentLoop:
                         slide_html_dir,
                         pptx_path,
                         aspect_ratio=request.powerpoint_type,
+                        soft_parsing=soft_parsing,
                     )
                 except Exception as e:
                     warning(

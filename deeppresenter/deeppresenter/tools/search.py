@@ -46,7 +46,7 @@ async def tavily_request(idx: int, params: dict) -> dict[str, Any]:
                 return await response.json()
             body = await response.text()
             if response.status == 429:
-                await asyncio.sleep(idx * MAX_RETRY_INTERVAL)
+                await asyncio.sleep(MAX_RETRY_INTERVAL)
             else:
                 await asyncio.sleep(RETRY_TIMES)
             warning(f"TAVILY Error [{idx:02d}] [{response.status}] body={body}")
@@ -235,7 +235,7 @@ async def download_file(url: str, output_file: str) -> str:
                 with open(output_path, "wb") as f:
                     f.write(data)
             break
-        except:
+        except Exception:
             pass
     else:
         return f"Failed to download file from {url}"

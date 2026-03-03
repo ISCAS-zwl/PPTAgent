@@ -18,8 +18,7 @@
  *   - Handles CSS gradients, borders, and margins
  *
  * VALIDATION:
- *   - Uses body width/height from HTML for viewport sizing
- *   - Throws error if HTML dimensions don't match presentation layout
+ *   - Automatically adapts presentation layout to match HTML body dimensions
  *   - Throws error if content overflows body (with overflow details)
  *
  * RETURNS:
@@ -81,11 +80,12 @@ async function getBodyDimensions(page) {
 }
 
 /**
- * Validate that HTML dimensions match the presentation layout
- * @returns {Array<string>} Array of validation error messages
+ * Adapt presentation layout to match HTML dimensions.
+ * - First slide: sets the layout from HTML body dimensions (if no layout pre-configured).
+ * - Subsequent slides: warns/errors if dimensions differ from the established layout.
+ * @returns {Array<string>} Array of validation error messages (empty if OK)
  */
-function validateDimensions(bodyDimensions, pres) {
-  const errors = [];
+function adaptLayout(bodyDimensions, pres) {
   const widthInches = bodyDimensions.width / PX_PER_IN;
   const heightInches = bodyDimensions.height / PX_PER_IN;
 
@@ -93,14 +93,25 @@ function validateDimensions(bodyDimensions, pres) {
     const layoutWidth = pres.presLayout.width / EMU_PER_IN;
     const layoutHeight = pres.presLayout.height / EMU_PER_IN;
 
-    if (Math.abs(layoutWidth - widthInches) > 0.1 || Math.abs(layoutHeight - heightInches) > 0.1) {
-      errors.push(
+    if (Math.abs(layoutWidth - widthInches) <= 0.1 && Math.abs(layoutHeight - heightInches) <= 0.1) {
+      return []; // already matches
+    }
+
+    // Layout already set (by a previous slide or by the caller) — mismatch
+    if (pres._html2pptx_layoutLocked) {
+      return [
         `HTML dimensions (${widthInches.toFixed(1)}" × ${heightInches.toFixed(1)}") ` +
-        `don't match presentation layout (${layoutWidth.toFixed(1)}" × ${layoutHeight.toFixed(1)}")`
-      );
+        `don't match the first slide's layout (${layoutWidth.toFixed(1)}" × ${layoutHeight.toFixed(1)}"). ` +
+        `All slides in a PPTX must share the same size.`
+      ];
     }
   }
-  return errors;
+
+  // First slide (or no layout pre-configured) — define layout from HTML
+  pres.defineLayout({ name: 'HTML_AUTO', width: widthInches, height: heightInches });
+  pres.layout = 'HTML_AUTO';
+  pres._html2pptx_layoutLocked = true;
+  return [];
 }
 
 /**
@@ -228,6 +239,16 @@ async function rasterizeGradients(page, slideData, bodyDimensions, tmpDir) {
       el.style.backgroundPosition = style.backgroundPosition || '0% 0%';
       if (style.borderRadius) el.style.borderRadius = style.borderRadius;
       if (style.boxShadow && style.boxShadow !== 'none') el.style.boxShadow = style.boxShadow;
+      if (style.transform && style.transform !== 'none') el.style.transform = style.transform;
+      // Handle border styles (uniform or individual sides)
+      if (style.border) {
+        el.style.border = style.border;
+      } else {
+        if (style.borderTop) el.style.borderTop = style.borderTop;
+        if (style.borderRight) el.style.borderRight = style.borderRight;
+        if (style.borderBottom) el.style.borderBottom = style.borderBottom;
+        if (style.borderLeft) el.style.borderLeft = style.borderLeft;
+      }
       if (style.opacity !== undefined && style.opacity !== null) el.style.opacity = String(style.opacity);
       el.style.pointerEvents = 'none';
       el.style.zIndex = '2147483647';
@@ -519,10 +540,12 @@ async function rasterizeGradients(page, slideData, bodyDimensions, tmpDir) {
 
 /**
  * Add all extracted elements (images, text, shapes, tables, lists) to the PowerPoint slide
+ * @param {boolean} soft - If true, continue processing even when individual elements fail
  */
-function addElements(slideData, targetSlide, pres) {
+function addElements(slideData, targetSlide, pres, soft = false) {
   for (const el of slideData.elements) {
-    if (el.type === 'image') {
+    try {
+      if (el.type === 'image') {
       let imagePath = el.src.startsWith('file://') ? el.src.replace('file://', '') : el.src;
       targetSlide.addImage({
         path: imagePath,
@@ -667,6 +690,13 @@ function addElements(slideData, targetSlide, pres) {
       if (el.style.shadow) textOptions.shadow = el.style.shadow;
 
       targetSlide.addText(el.text, textOptions);
+    }
+    } catch (err) {
+      if (soft) {
+        console.warn(`[SOFT MODE] Failed to add element (type: ${el.type}): ${err.message}`);
+      } else {
+        throw err;
+      }
     }
   }
 }
@@ -1359,15 +1389,34 @@ async function extractSlideData(page) {
       const hasBefore = beforeStyle && beforeStyle.content && beforeStyle.content !== 'none' && beforeStyle.content !== 'normal';
       const hasAfter = afterStyle && afterStyle.content && afterStyle.content !== 'none' && afterStyle.content !== 'normal';
 
+      // Check if pseudo-element has visual styles (background, border, shadow, etc.)
+      const hasVisualStyles = (style) => {
+        if (!style) return false;
+        const hasBg = style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)';
+        const hasBgImage = style.backgroundImage && style.backgroundImage !== 'none';
+        const hasBorder = (style.borderWidth && parseFloat(style.borderWidth) > 0) ||
+          (style.borderTopWidth && parseFloat(style.borderTopWidth) > 0) ||
+          (style.borderRightWidth && parseFloat(style.borderRightWidth) > 0) ||
+          (style.borderBottomWidth && parseFloat(style.borderBottomWidth) > 0) ||
+          (style.borderLeftWidth && parseFloat(style.borderLeftWidth) > 0);
+        const hasShadow = style.boxShadow && style.boxShadow !== 'none';
+        const hasOutline = style.outline && style.outline !== 'none' && parseFloat(style.outlineWidth) > 0;
+        return hasBg || hasBgImage || hasBorder || hasShadow || hasOutline;
+      };
+
       if (hasBefore) {
         const content = beforeStyle.content.replace(/^["']|["']$/g, '');
-        if (content && beforeStyle.display !== 'none') {
+        const hasVisual = hasVisualStyles(beforeStyle);
+        // Skip CSS counters/functions - they're computed values, not literal text
+        const isCssFunction = /^(counter|counters|attr|url)\(/.test(beforeStyle.content);
+        // Materialize if has content OR has visual styles (even with empty content)
+        // But skip CSS counter functions
+        if ((content || hasVisual) && beforeStyle.display !== 'none' && !isCssFunction) {
           const span = document.createElement('span');
           span.className = '__pseudo_before__';
           span.textContent = content;
 
-          // Preserve original positioning to maintain layout
-          // Key: preserve position:absolute to keep element out of document flow
+          // Preserve original positioning and ALL visual styles
           span.style.cssText = `
             display: ${beforeStyle.display};
             position: ${beforeStyle.position};
@@ -1375,6 +1424,8 @@ async function extractSlideData(page) {
             right: ${beforeStyle.right};
             top: ${beforeStyle.top};
             bottom: ${beforeStyle.bottom};
+            width: ${beforeStyle.width};
+            height: ${beforeStyle.height};
             font-size: ${beforeStyle.fontSize};
             font-family: ${beforeStyle.fontFamily};
             font-weight: ${beforeStyle.fontWeight};
@@ -1382,6 +1433,16 @@ async function extractSlideData(page) {
             color: ${beforeStyle.color};
             text-decoration: ${beforeStyle.textDecoration};
             line-height: ${beforeStyle.lineHeight};
+            background-color: ${beforeStyle.backgroundColor};
+            background-image: ${beforeStyle.backgroundImage};
+            background-size: ${beforeStyle.backgroundSize};
+            background-position: ${beforeStyle.backgroundPosition};
+            background-repeat: ${beforeStyle.backgroundRepeat};
+            border: ${beforeStyle.border};
+            border-radius: ${beforeStyle.borderRadius};
+            box-shadow: ${beforeStyle.boxShadow};
+            transform: ${beforeStyle.transform};
+            opacity: ${beforeStyle.opacity};
           `;
           el.insertBefore(span, el.firstChild);
         }
@@ -1389,12 +1450,17 @@ async function extractSlideData(page) {
 
       if (hasAfter) {
         const content = afterStyle.content.replace(/^["']|["']$/g, '');
-        if (content && afterStyle.display !== 'none') {
+        const hasVisual = hasVisualStyles(afterStyle);
+        // Skip CSS counters/functions - they're computed values, not literal text
+        const isCssFunction = /^(counter|counters|attr|url)\(/.test(afterStyle.content);
+        // Materialize if has content OR has visual styles (even with empty content)
+        // But skip CSS counter functions
+        if ((content || hasVisual) && afterStyle.display !== 'none' && !isCssFunction) {
           const span = document.createElement('span');
           span.className = '__pseudo_after__';
           span.textContent = content;
 
-          // Preserve original positioning to maintain layout
+          // Preserve original positioning and ALL visual styles
           span.style.cssText = `
             display: ${afterStyle.display};
             position: ${afterStyle.position};
@@ -1402,6 +1468,8 @@ async function extractSlideData(page) {
             right: ${afterStyle.right};
             top: ${afterStyle.top};
             bottom: ${afterStyle.bottom};
+            width: ${afterStyle.width};
+            height: ${afterStyle.height};
             font-size: ${afterStyle.fontSize};
             font-family: ${afterStyle.fontFamily};
             font-weight: ${afterStyle.fontWeight};
@@ -1409,6 +1477,16 @@ async function extractSlideData(page) {
             color: ${afterStyle.color};
             text-decoration: ${afterStyle.textDecoration};
             line-height: ${afterStyle.lineHeight};
+            background-color: ${afterStyle.backgroundColor};
+            background-image: ${afterStyle.backgroundImage};
+            background-size: ${afterStyle.backgroundSize};
+            background-position: ${afterStyle.backgroundPosition};
+            background-repeat: ${afterStyle.backgroundRepeat};
+            border: ${afterStyle.border};
+            border-radius: ${afterStyle.borderRadius};
+            box-shadow: ${afterStyle.boxShadow};
+            transform: ${afterStyle.transform};
+            opacity: ${afterStyle.opacity};
           `;
           el.appendChild(span);
         }
@@ -2162,17 +2240,23 @@ async function extractSlideData(page) {
           document.body.appendChild(holder);
 
           const pseudoBefore = clone.querySelector('.__pseudo_before__');
+          const pseudoAfter = clone.querySelector('.__pseudo_after__');
           let customBulletCode = null;
 
+          // Remove all pseudo-elements to prevent duplicate text extraction
+          // Pseudo-element text content comes from CSS content property and should not be extracted
           if (pseudoBefore) {
             const bulletText = pseudoBefore.textContent;
             if (bulletText) {
               const firstChar = bulletText.trim()[0];
               if (firstChar && BULLET_CHAR_REGEX.test(firstChar)) {
                 customBulletCode = getUnicodeCode(firstChar);
-                pseudoBefore.remove();
               }
             }
+            pseudoBefore.remove();
+          }
+          if (pseudoAfter) {
+            pseudoAfter.remove();
           }
 
           // Remove inline bullet markers (e.g., <span class="bullet">•</span>)
@@ -2312,11 +2396,117 @@ async function extractSlideData(page) {
       // Handle inline elements (B, SPAN, etc.) that are styled as display: block
       // These need to be extracted as text elements, not skipped
       if (INLINE_TEXT_TAGS.has(el.tagName) && el.tagName !== 'BR') {
-        if (el.className && (
+        const computed = window.getComputedStyle(el);
+        const isPseudoElement = el.className && (
           el.className.includes('__pseudo_before__') ||
           el.className.includes('__pseudo_after__')
-        )) return;
-        const computed = window.getComputedStyle(el);
+        );
+
+        // Handle pseudo-elements with visual styles (background, border, shadow, border-radius)
+        if (isPseudoElement) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            const hasBg = computed.backgroundColor && computed.backgroundColor !== 'rgba(0, 0, 0, 0)';
+            const hasBgImage = computed.backgroundImage && computed.backgroundImage !== 'none';
+            const hasBorder = (computed.borderWidth && parseFloat(computed.borderWidth) > 0) ||
+              (computed.borderTopWidth && parseFloat(computed.borderTopWidth) > 0) ||
+              (computed.borderRightWidth && parseFloat(computed.borderRightWidth) > 0) ||
+              (computed.borderBottomWidth && parseFloat(computed.borderBottomWidth) > 0) ||
+              (computed.borderLeftWidth && parseFloat(computed.borderLeftWidth) > 0);
+            const hasShadow = computed.boxShadow && computed.boxShadow !== 'none';
+            const hasBorderRadius = computed.borderRadius && parseFloat(computed.borderRadius) > 0;
+
+            // Pseudo-elements with visual styles need to be rendered as shapes or bgImages
+            // Note: Pseudo-element text content comes from CSS content property and should NOT be extracted as text
+            if (hasBg || hasBgImage || hasBorder || hasShadow || hasBorderRadius) {
+              // Check if pseudo-element has complex styles that need rasterization
+              // Complex styles: dashed/dotted borders, circular shapes (border-radius >= 50%), shadows, transforms
+              const borderStyle = computed.borderStyle || computed.borderTopStyle || 'solid';
+              const isDashedOrDotted = borderStyle === 'dashed' || borderStyle === 'dotted';
+              const borderRadiusValue = parseFloat(computed.borderRadius);
+              const isCircular = computed.borderRadius && computed.borderRadius.includes('%') && borderRadiusValue >= 50;
+              const hasTransform = computed.transform && computed.transform !== 'none';
+              const needsRasterization = hasBgImage || isDashedOrDotted || isCircular || hasShadow || hasTransform;
+
+              // If no text but has visual styles, render as bgImage (for complex styles) or shape (for simple styles)
+              const bgImage = computed.backgroundImage;
+              const actualWidth = rect.width;
+              const actualHeight = rect.height;
+              const shadow = parseBoxShadow(computed.boxShadow);
+
+              if (needsRasterization) {
+                // Rasterize complex pseudo-elements as bgImage
+                elements.push({
+                  type: 'bgImage',
+                  position: {
+                    x: pxToInch(rect.left),
+                    y: pxToInch(rect.top),
+                    w: pxToInch(actualWidth),
+                    h: pxToInch(actualHeight)
+                  },
+                  style: {
+                    backgroundImage: bgImage,
+                    backgroundRepeat: computed.backgroundRepeat,
+                    backgroundSize: computed.backgroundSize,
+                    backgroundPosition: computed.backgroundPosition,
+                    backgroundColor: computed.backgroundColor,
+                    borderRadius: computed.borderRadius,
+                    border: hasBorder ? `${computed.borderWidth || computed.borderTopWidth} ${borderStyle} ${computed.borderColor || computed.borderTopColor}` : null,
+                    borderTop: computed.borderTopWidth ? `${computed.borderTopWidth} ${computed.borderTopStyle} ${computed.borderTopColor}` : null,
+                    borderRight: computed.borderRightWidth ? `${computed.borderRightWidth} ${computed.borderRightStyle} ${computed.borderRightColor}` : null,
+                    borderBottom: computed.borderBottomWidth ? `${computed.borderBottomWidth} ${computed.borderBottomStyle} ${computed.borderBottomColor}` : null,
+                    borderLeft: computed.borderLeftWidth ? `${computed.borderLeftWidth} ${computed.borderLeftStyle} ${computed.borderLeftColor}` : null,
+                    boxShadow: computed.boxShadow,
+                    transform: computed.transform,
+                    opacity: getEffectiveOpacity(el)
+                  }
+                });
+              } else if (hasBg || hasBorder) {
+                // Simple pseudo-elements can be rendered as shapes
+                elements.push({
+                  type: 'shape',
+                  text: '',
+                  position: {
+                    x: pxToInch(rect.left),
+                    y: pxToInch(rect.top),
+                    w: pxToInch(actualWidth),
+                    h: pxToInch(actualHeight)
+                  },
+                  shape: {
+                    fill: hasBg ? rgbToHex(computed.backgroundColor) : null,
+                    transparency: hasBg ? getEffectiveTransparency(el, computed.backgroundColor) : null,
+                    line: hasBorder ? {
+                      color: rgbToHex(computed.borderColor || computed.borderTopColor),
+                      width: pxToPoints(computed.borderWidth || computed.borderTopWidth),
+                      dashType: mapBorderStyleToDashType(borderStyle)
+                    } : null,
+                    rectRadius: (() => {
+                      const radius = computed.borderRadius;
+                      const radiusValue = parseFloat(radius);
+                      if (radiusValue === 0) return 0;
+
+                      if (radius.includes('%')) {
+                        if (radiusValue >= 50) return 1;
+                        const minDim = Math.min(actualWidth, actualHeight);
+                        return (radiusValue / 100) * pxToInch(minDim);
+                      }
+
+                      if (radius.includes('pt')) return radiusValue / 72;
+                      return radiusValue / PX_PER_IN;
+                    })(),
+                    shadow: shadow
+                  }
+                });
+              }
+
+              processed.add(el);
+              return;
+            }
+          }
+          // Pseudo-elements without visual styles can be skipped
+          return;
+        }
+
         const isBlock = computed.display === 'block' || computed.display === 'inline-block';
         const rect = el.getBoundingClientRect();
         const lineRanges = getLineRanges(computed, rect);
@@ -2618,11 +2808,11 @@ async function extractSlideData(page) {
  * Main function: Convert HTML file to PowerPoint slide
  * @param {string} htmlFile - Path to HTML file
  * @param {Object} pres - PptxGenJS presentation instance
- * @param {Object} options - Optional configuration { slide, tmpDir }
+ * @param {Object} options - Optional configuration { slide, tmpDir, soft }
  * @returns {Promise<{slide, placeholders}>} Slide object and array of placeholder positions
  */
 async function html2pptx(htmlFile, pres, options = {}) {
-  const { slide = null } = options;
+  const { slide = null, soft = false } = options;
   const tmpDir = options.tmpDir || fs.mkdtempSync(path.join(os.tmpdir(), 'html2pptx-'));
 
   try {
@@ -2702,7 +2892,7 @@ async function html2pptx(htmlFile, pres, options = {}) {
       if (bodyDimensions.errors && bodyDimensions.errors.length > 0) {
         validationErrors.push(...bodyDimensions.errors);
       }
-      validationErrors.push(...validateDimensions(bodyDimensions, pres));
+      validationErrors.push(...adaptLayout(bodyDimensions, pres));
       validationErrors.push(...validateTextBoxPosition(slideData, bodyDimensions));
 
       // Validate images exist
@@ -2720,12 +2910,37 @@ async function html2pptx(htmlFile, pres, options = {}) {
         validationErrors.push(`Background image not found: ${backgroundPath}`);
       }
 
-      // Fail early with all errors
+      // Fail early with all errors (unless soft mode is enabled)
       if (validationErrors.length > 0) {
-        const errorMessage = validationErrors.length === 1
-          ? validationErrors[0]
-          : `Multiple validation errors found:\n${validationErrors.map((e, i) => `  ${i + 1}. ${e}`).join('\n')}`;
-        throw new Error(errorMessage);
+        if (soft) {
+          // In soft mode, log warnings but continue processing
+          console.warn(`[SOFT MODE] ${htmlFile}: ${validationErrors.length} validation warning(s) ignored:`);
+          validationErrors.forEach((err, i) => {
+            console.warn(`  ${i + 1}. ${err}`);
+          });
+
+          // Filter out elements with missing images in soft mode
+          slideData.elements = slideData.elements.filter((el) => {
+            if (el.type !== 'image') return true;
+            const imagePath = resolveImagePath(el.src);
+            if (imagePath && !fs.existsSync(imagePath)) {
+              console.warn(`[SOFT MODE] Skipping missing image: ${imagePath}`);
+              return false;
+            }
+            return true;
+          });
+
+          // Clear missing background image in soft mode
+          if (backgroundPath && !fs.existsSync(backgroundPath)) {
+            console.warn(`[SOFT MODE] Skipping missing background image: ${backgroundPath}`);
+            slideData.background = { type: 'color', value: 'FFFFFF' };
+          }
+        } else {
+          const errorMessage = validationErrors.length === 1
+            ? validationErrors[0]
+            : `Multiple validation errors found:\n${validationErrors.map((e, i) => `  ${i + 1}. ${e}`).join('\n')}`;
+          throw new Error(errorMessage);
+        }
       }
 
       await rasterizeGradients(page, slideData, bodyDimensions, tmpDir);
@@ -2736,7 +2951,7 @@ async function html2pptx(htmlFile, pres, options = {}) {
     const targetSlide = slide || pres.addSlide();
 
     await addBackground(slideData, targetSlide, tmpDir);
-    addElements(slideData, targetSlide, pres);
+    addElements(slideData, targetSlide, pres, soft);
 
     return { slide: targetSlide, placeholders: slideData.placeholders };
   } catch (error) {

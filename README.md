@@ -36,16 +36,16 @@
 
 https://github.com/user-attachments/assets/938889e8-d7d8-4f4f-b2a1-07ee3ef3991a
 
-## 📫 Contact
-> The main contributor of this repo is a Master's student graduating in 2026, currently on the job market. Feel free to reach out for collaboration or job opportunities.
+## Contact 📫
+> The main contributor of this repo is a Master's student graduating in 2026, feel free to reach out for collaboration or opportunities.
 >
-> 本仓库的主要贡献者是一名 2026 届硕士毕业生，正在求职中，欢迎联系。
+> 本仓库的主要贡献者是一名 2026 届硕士毕业生，欢迎联系合作或交流机会。
 
 <div align="center">
   <img src="resource/wechat.jpg" width="140px">
 </div>
 
-## 📅 News
+## News 📅
 - [2026/01]: We support freeform and template generation support PPTX export, offline mode now! Context management is added to avoid context overflow.
 - [2025/12]: 🔥 Released V2 with major improvements - Deep Research Integration, Free-Form Visual Design, Autonomous Asset Creation, Text-to-Image Generation, and Agent Environment with sandbox & 20+ tools.
 - [2025/09]: 🛠️ MCP server support added - see [MCP Server](PPTAgent/DOC.md#mcp-server-) for configuration details
@@ -54,7 +54,7 @@ https://github.com/user-attachments/assets/938889e8-d7d8-4f4f-b2a1-07ee3ef3991a
 - [2025/05]: ✨ Released v1 with core functionality and 🌟 breakthrough: reached 1,000 stars on GitHub! - see [release notes](https://github.com/icip-cas/PPTAgent/releases/tag/v0.1.0) for details
 - [2025/01]: 🔓 Open-sourced the codebase, with experimental code archived at [experiment release](https://github.com/icip-cas/PPTAgent/releases/tag/experiment)
 
-## 📖 Usage
+## Usage 📖
 
 > [!IMPORTANT]
 > 1. All these API keys, configurations, and services are **required**.
@@ -94,7 +94,8 @@ Build docker images: `docker compose build`
 - **Running locally**:
 
   ```bash
-  pip install -e deeppresenter
+  cd deeppresenter
+  pip install -e .
   playwright install-deps
   playwright install chromium
   npm install
@@ -105,7 +106,7 @@ Build docker images: `docker compose build`
 > [!TIP]
 > 🚀 All configurable variables can be found in [constants.py](deeppresenter/deeppresenter/utils/constants.py).
 
-## 💡 Case Study
+## Case Study 💡
 
 - #### Prompt: Please present the given document to me.
 
@@ -189,6 +190,121 @@ Build docker images: `docker compose build`
 
 ---
 
+## Contributors 🌟
+
+<table>
+<tr>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/Force1ess>
+            <img src=https://avatars.githubusercontent.com/u/72636351?v=4 width="80;"  alt=Force1ess/>
+            <br />
+            <sub style="font-size:14px"><b>Force1ess</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/Puellaquae>
+            <img src=https://avatars.githubusercontent.com/u/22560343?v=4 width="80;"  alt=Puelloc/>
+            <br />
+            <sub style="font-size:14px"><b>Puelloc</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/Dnoob>
+            <img src=https://avatars.githubusercontent.com/u/92987618?v=4 width="80;"  alt=Dnoob/>
+            <br />
+            <sub style="font-size:14px"><b>Dnoob</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/Sadahlu>
+            <img src=https://avatars.githubusercontent.com/u/126563707?v=4 width="80;"  alt=Sadahlu/>
+            <br />
+            <sub style="font-size:14px"><b>Sadahlu</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/hysyyds>
+            <img src=https://avatars.githubusercontent.com/u/80150669?v=4 width="80;"  alt=hongyan/>
+            <br />
+            <sub style="font-size:14px"><b>hongyan</b></sub>
+        </a>
+    </td>
+</tr>
+<tr>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/KurisuMakiseSame>
+            <img src=https://avatars.githubusercontent.com/u/168447425?v=4 width="80;"  alt=KurisuMakiseSame/>
+            <br />
+            <sub style="font-size:14px"><b>KurisuMakiseSame</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/kylooh>
+            <img src=https://avatars.githubusercontent.com/u/26456650?v=4 width="80;"  alt=Eliot White/>
+            <br />
+            <sub style="font-size:14px"><b>Eliot White</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/EvolvedGhost>
+            <img src=https://avatars.githubusercontent.com/u/92856393?v=4 width="80;"  alt=EvolvedGhost/>
+            <br />
+            <sub style="font-size:14px"><b>EvolvedGhost</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/ISCAS-zwl>
+            <img src=https://avatars.githubusercontent.com/u/179820048?v=4 width="80;"  alt=ISCAS-zwl/>
+            <br />
+            <sub style="font-size:14px"><b>ISCAS-zwl</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/James4Ever0>
+            <img src=https://avatars.githubusercontent.com/u/103997068?v=4 width="80;"  alt=James Brown/>
+            <br />
+            <sub style="font-size:14px"><b>James Brown</b></sub>
+        </a>
+    </td>
+</tr>
+<tr>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/LasRuinasCirculares>
+            <img src=https://avatars.githubusercontent.com/u/119716645?v=4 width="80;"  alt=JunZhang/>
+            <br />
+            <sub style="font-size:14px"><b>JunZhang</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/openaitx-system>
+            <img src=https://avatars.githubusercontent.com/u/215529505?v=4 width="80;"  alt=Open AI Tx/>
+            <br />
+            <sub style="font-size:14px"><b>Open AI Tx</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/haosenwang1018>
+            <img src=https://avatars.githubusercontent.com/u/167664334?v=4 width="80;"  alt=Sense_wang/>
+            <br />
+            <sub style="font-size:14px"><b>Sense_wang</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/DeJeune>
+            <img src=https://avatars.githubusercontent.com/u/67425183?v=4 width="80;"  alt=SuYao/>
+            <br />
+            <sub style="font-size:14px"><b>SuYao</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
+        <a href=https://github.com/Dormiveglia-elf>
+            <img src=https://avatars.githubusercontent.com/u/81767213?v=4 width="80;"  alt=Zhenyu/>
+            <br />
+            <sub style="font-size:14px"><b>Zhenyu</b></sub>
+        </a>
+    </td>
+</tr>
+</table>
 
 [![Star History Chart](https://api.star-history.com/svg?repos=icip-cas/PPTAgent&type=Date)](https://star-history.com/#icip-cas/PPTAgent&Date)
 
@@ -222,5 +338,15 @@ If you find this project helpful, please use the following to cite it:
     pages = "14413--14429",
     ISBN = "979-8-89176-332-6",
     abstract = "Automatically generating presentations from documents is a challenging task that requires accommodating content quality, visual appeal, and structural coherence. Existing methods primarily focus on improving and evaluating the content quality in isolation, overlooking visual appeal and structural coherence, which limits their practical applicability. To address these limitations, we propose PPTAgent, which comprehensively improves presentation generation through a two-stage, edit-based approach inspired by human workflows. PPTAgent first analyzes reference presentations to extract slide-level functional types and content schemas, then drafts an outline and iteratively generates editing actions based on selected reference slides to create new slides. To comprehensively evaluate the quality of generated presentations, we further introduce PPTEval, an evaluation framework that assesses presentations across three dimensions: Content, Design, and Coherence. Results demonstrate that PPTAgent significantly outperforms existing automatic presentation generation methods across all three dimensions."
+}
+
+@misc{zheng2026deeppresenterenvironmentgroundedreflectionagentic,
+      title={DeepPresenter: Environment-Grounded Reflection for Agentic Presentation Generation},
+      author={Hao Zheng and Guozhao Mo and Xinru Yan and Qianhao Yuan and Wenkai Zhang and Xuanang Chen and Yaojie Lu and Hongyu Lin and Xianpei Han and Le Sun},
+      year={2026},
+      eprint={2602.22839},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2602.22839},
 }
 ```
