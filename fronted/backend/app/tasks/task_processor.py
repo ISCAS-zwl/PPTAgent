@@ -1,10 +1,12 @@
 import asyncio
+import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from app.models.task import Task, Sample, TaskStatus, WebSocketMessage, Artifact, ArtifactType
 from app.services.task_service import TaskService
 from app.services.websocket_manager import manager
 from app.services.deeppresenter_integration import deeppresenter_integration
+from app.core.config import settings
 
 
 class TaskProcessor:
@@ -69,6 +71,7 @@ class TaskProcessor:
             "num_pages": task.pages if task.pages != "auto" else None,
             "convert_type": task.output_type,
             "template": task.options.get("template"),
+            "powerpoint_type": task.aspect_ratio,
             "attachments": [],
         }
 
@@ -134,6 +137,32 @@ class TaskProcessor:
                 file_path = event.get("file_path")
                 print(f"[TaskProcessor] PPT generated at: {file_path}")
 
+                # 提取 slides 目录路径并发送给前端
+                workspace_path = Path(file_path).parent
+                slides_dir = workspace_path / "slides"
+                if slides_dir.exists():
+                    slide_files = sorted(slides_dir.glob("slide_*.html"))
+                    if slide_files:
+                        slides_info = {"slide_html_dir": str(slides_dir), "html_files": [f.name for f in slide_files]}
+                        slides_json = f"```json\n{json.dumps(slides_info, ensure_ascii=False, indent=2)}\n```"
+                        content_chunks.append(slides_json)
+                        sample.content = "\n\n".join(content_chunks[-20:])
+                        # 持久化 slides 信息到 Redis
+                        await TaskService.append_message(
+                            task.id,
+                            sample.id,
+                            {"content": slides_json, "role": "system"}
+                        )
+                        await manager.send_to_task_subscribers(
+                            task.id,
+                            WebSocketMessage(
+                                type="chunk",
+                                task_id=task.id,
+                                sample_id=sample.id,
+                                content=slides_json,
+                            ),
+                        )
+
             elif event_type == "stats":
                 token_stats = event.get("token_stats", {})
 
@@ -143,6 +172,36 @@ class TaskProcessor:
                 total_slides = event.get("total_slides", 0)
                 phase = event.get("phase", "")
                 sample.progress = progress
+
+                # 实时扫描并发送已生成的幻灯片列表
+                # 单样本模式：使用 task.id[:8] 作为 shortId（与 DeepPresenter 一致）
+                from datetime import datetime
+                date_str = datetime.now().strftime('%Y%m%d')
+                short_task_id = task.id[:8]
+                workspace_path = Path(settings.pptagent_workspace) / date_str / short_task_id
+                slides_dir = workspace_path / "slides"
+
+                if slides_dir.exists():
+                    slide_files = sorted(slides_dir.glob("slide_*.html"))
+                    if slide_files:
+                        slides_info = {"html_files": [f.name for f in slide_files]}
+                        slides_json = json.dumps(slides_info, ensure_ascii=False)
+                        # 更新 sample.content，确保前端能提取到幻灯片列表
+                        # 避免重复添加相同的 JSON
+                        if slides_json not in sample.content:
+                            content_chunks.append(slides_json)
+                            sample.content = "\n\n".join(content_chunks[-20:])
+                            # 发送 slides 信息给前端实时渲染
+                            await manager.send_to_task_subscribers(
+                                task.id,
+                                WebSocketMessage(
+                                    type="chunk",
+                                    task_id=task.id,
+                                    sample_id=sample.id,
+                                    content=slides_json,
+                                ),
+                            )
+
                 await manager.send_to_task_subscribers(
                     task.id,
                     WebSocketMessage(
@@ -191,6 +250,7 @@ class TaskProcessor:
                     status=TaskStatus.COMPLETED,
                     progress=100,
                     artifact=artifact,
+                    file_path=file_path,
                 ),
             )
         else:
@@ -217,19 +277,36 @@ class TaskProcessor:
             """处理单个样本的协程"""
             # 使用完全独立的 UUID 作为 task_id，避免 DeepPresenter logger 冲突
             sample_task_id = str(uuid.uuid4())
+            short_task_id = sample_task_id[:8]
             file_path = None
             token_stats = None
             content_chunks = []
 
+            # 预设 file_path，让前端可以提取短 ID 进行实时预览
+            # 格式: workspace/日期/短ID/presentation.pptx
+            from datetime import datetime
+            date_str = datetime.now().strftime('%Y%m%d')
+            sample.file_path = f"{settings.pptagent_workspace}/{date_str}/{short_task_id}/presentation.pptx"
+
             # 更新样本状态为运行中
             sample.status = TaskStatus.RUNNING
+
+            # 立即更新任务，让前端获取 file_path
+            await TaskService.update_task(
+                task.id,
+                {
+                    "samples": [s.model_dump() for s in samples],
+                },
+            )
+
             await manager.send_to_task_subscribers(
                 task.id,
                 WebSocketMessage(
                     type="chunk",
                     task_id=task.id,
                     sample_id=sample.id,
-                    content=f"🔄 样本 {sample_index + 1} 开始生成...",
+                    content="🔄 开始生成...",
+                    file_path=sample.file_path,
                 ),
             )
 
@@ -250,7 +327,7 @@ class TaskProcessor:
                             await TaskService.append_message(
                                 task.id,
                                 sample.id,
-                                {"content": f"[样本 {sample_index + 1}] {message_content}", "role": event.get("role"), "tool_calls": event.get("tool_calls")}
+                                {"content": message_content, "role": event.get("role"), "tool_calls": event.get("tool_calls")}
                             )
                             # 发送样本特定的消息
                             await manager.send_to_task_subscribers(
@@ -259,7 +336,7 @@ class TaskProcessor:
                                     type="chunk",
                                     task_id=task.id,
                                     sample_id=sample.id,
-                                    content=f"[样本 {sample_index + 1}] {message_content}",
+                                    content=message_content,
                                     role=event.get("role"),
                                     tool_calls=event.get("tool_calls"),
                                 ),
@@ -268,6 +345,32 @@ class TaskProcessor:
                     elif event_type == "file":
                         file_path = event.get("file_path")
                         print(f"[TaskProcessor] Sample {sample_index + 1} PPT generated at: {file_path}")
+
+                        # 提取 slides 目录路径并发送给前端
+                        workspace_path = Path(file_path).parent
+                        slides_dir = workspace_path / "slides"
+                        if slides_dir.exists():
+                            slide_files = sorted(slides_dir.glob("slide_*.html"))
+                            if slide_files:
+                                slides_info = {"slide_html_dir": str(slides_dir), "html_files": [f.name for f in slide_files]}
+                                slides_json = f"```json\n{json.dumps(slides_info, ensure_ascii=False, indent=2)}\n```"
+                                content_chunks.append(slides_json)
+                                sample.content = "\n\n".join(content_chunks[-20:])
+                                # 持久化 slides 信息到 Redis
+                                await TaskService.append_message(
+                                    task.id,
+                                    sample.id,
+                                    {"content": slides_json, "role": "system"}
+                                )
+                                await manager.send_to_task_subscribers(
+                                    task.id,
+                                    WebSocketMessage(
+                                        type="chunk",
+                                        task_id=task.id,
+                                        sample_id=sample.id,
+                                        content=slides_json,
+                                    ),
+                                )
 
                     elif event_type == "stats":
                         token_stats = event.get("token_stats", {})
@@ -283,7 +386,7 @@ class TaskProcessor:
                                 task_id=task.id,
                                 sample_id=sample.id,
                                 progress=progress,
-                                content=f"📊 样本 {sample_index + 1} 进度: {progress}%",
+                                content=f"📊 进度: {progress}%",
                             ),
                         )
 
@@ -293,7 +396,7 @@ class TaskProcessor:
                 if file_path:
                     artifact = Artifact(
                         type=ArtifactType.PPT,
-                        content=f"样本 {sample_index + 1} PPT 生成完成: {Path(file_path).name}",
+                        content=f"PPT 生成完成: {Path(file_path).name}",
                         language="pdf" if file_path.endswith(".pdf") else "pptx",
                     )
                     sample.status = TaskStatus.COMPLETED
@@ -301,13 +404,25 @@ class TaskProcessor:
                     sample.file_path = file_path
                     sample.artifact = artifact
 
+                    # 立即更新任务中的样本状态
+                    await TaskService.update_task(
+                        task.id,
+                        {
+                            "samples": [s.model_dump() for s in samples],
+                        },
+                    )
+
+                    # 发送样本完成消息
                     await manager.send_to_task_subscribers(
                         task.id,
                         WebSocketMessage(
-                            type="chunk",
+                            type="complete",
                             task_id=task.id,
                             sample_id=sample.id,
-                            content=f"✅ 样本 {sample_index + 1} 生成完成!",
+                            status=TaskStatus.COMPLETED,
+                            progress=100,
+                            artifact=artifact,
+                            file_path=file_path,
                         ),
                     )
 
@@ -329,7 +444,7 @@ class TaskProcessor:
                         type="chunk",
                         task_id=task.id,
                         sample_id=sample.id,
-                        content=f"❌ 样本 {sample_index + 1} 生成失败: {error_msg}",
+                        content=f"❌ 生成失败: {error_msg}",
                     ),
                 )
                 return {

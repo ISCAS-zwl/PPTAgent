@@ -52,17 +52,6 @@ export default function TaskStatusBar() {
                         <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
                           {task.prompt}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="flex-1 bg-gray-200 dark:bg-gray-600 rounded-full h-1.5">
-                            <div
-                              className="bg-gradient-to-r from-blue-600 to-purple-600 h-1.5 rounded-full transition-all"
-                              style={{ width: `${task.progress}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {task.progress}%
-                          </span>
-                        </div>
                       </div>
                     </motion.div>
                   ))}
@@ -71,23 +60,23 @@ export default function TaskStatusBar() {
             </div>
           </motion.div>
         ) : (
-          /* 折叠状态：只显示一个小按钮 */
+          /* 折叠状态：显示一个更美观的小条 */
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex justify-center"
+            className="bg-gray-700 dark:bg-gray-600 shadow-lg"
           >
             <button
               onClick={() => setIsExpanded(true)}
-              className="flex items-center gap-2 px-4 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 border-b-0 rounded-t-lg shadow-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              className="w-full flex items-center justify-center gap-3 px-4 py-2 hover:bg-gray-800 dark:hover:bg-gray-700 transition-all"
               title="展开任务进度"
             >
-              <Loader2 className="animate-spin text-blue-600" size={14} />
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+              <Loader2 className="animate-spin text-white" size={16} />
+              <span className="text-sm font-medium text-white">
                 {runningTasks.length} 个任务运行中
               </span>
-              <ChevronUp size={14} className="text-gray-500 dark:text-gray-400" />
+              <ChevronUp size={16} className="text-white" />
             </button>
           </motion.div>
         )}

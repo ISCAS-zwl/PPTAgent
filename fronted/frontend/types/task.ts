@@ -6,9 +6,21 @@ export interface Artifact {
   language?: string;
 }
 
+export interface ToolCall {
+  name: string;
+  arguments?: string;
+}
+
+export interface AgentMessage {
+  content: string;
+  role?: string;  // system, user, assistant, tool
+  toolCalls?: ToolCall[];
+}
+
 export interface Sample {
   id: string;
   content: string;
+  messages?: AgentMessage[];
   status: TaskStatus;
   progress: number;
   createdAt: number;
@@ -29,6 +41,7 @@ export interface Task {
   pages?: string;
   outputType?: string;
   uploadedFileId?: string;
+  aspectRatio?: string;  // 幻灯片尺寸比例
 }
 
 export interface WebSocketMessage {
@@ -40,12 +53,10 @@ export interface WebSocketMessage {
   progress?: number;
   error?: string;
   artifact?: Task['artifact'];
+  filePath?: string;
   // 新增字段用于显示 Agent 交互过程
   role?: string;  // system, user, assistant, tool
-  toolCalls?: Array<{
-    name: string;
-    arguments?: string;
-  }>;
+  toolCalls?: ToolCall[];
 }
 
 export interface CreateTaskRequest {
@@ -54,6 +65,7 @@ export interface CreateTaskRequest {
   pages?: string;
   outputType?: string;
   uploadedFileId?: string;
+  aspectRatio?: string;  // 幻灯片尺寸比例
   options?: {
     template?: string;
     style?: string;

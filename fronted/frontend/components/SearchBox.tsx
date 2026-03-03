@@ -11,6 +11,7 @@ export default function SearchBox() {
   const [loading, setLoading] = useState(false);
   const [sampleCount, setSampleCount] = useState(1);
   const [pages, setPages] = useState("auto");
+  const [aspectRatio, setAspectRatio] = useState("16:9");
   const [outputType, setOutputType] = useState("freeform");
   const [template, setTemplate] = useState("auto");
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
@@ -66,6 +67,7 @@ export default function SearchBox() {
         prompt: prompt.trim(),
         sampleCount,
         pages,
+        aspectRatio,
         outputType,
         uploadedFileId: uploadedFile?.fileId,
         options: {
@@ -89,6 +91,7 @@ export default function SearchBox() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         pages,
+        aspectRatio,
         outputType,
         uploadedFileId: uploadedFile?.fileId,
       };
@@ -135,7 +138,7 @@ export default function SearchBox() {
             <button
               type="submit"
               disabled={loading || !prompt.trim()}
-              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-6 py-2.5 bg-gray-700 dark:bg-gray-600 text-white rounded-xl font-medium hover:bg-gray-800 dark:hover:bg-gray-700 hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {loading ? (
                 <>
@@ -152,12 +155,12 @@ export default function SearchBox() {
 
       {/* 配置选项区域 */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* 页数设置 */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
               <FileSliders size={18} className="text-blue-500" />
-              <span className="font-medium text-sm">幻灯片页数 (#pages)</span>
+              <span className="font-medium text-sm">幻灯片页数</span>
             </div>
             <select
               value={pages}
@@ -173,11 +176,32 @@ export default function SearchBox() {
             </select>
           </div>
 
+          {/* 尺寸比例 */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+              <Layout size={18} className="text-orange-500" />
+              <span className="font-medium text-sm">幻灯片尺寸</span>
+            </div>
+            <select
+              value={aspectRatio}
+              onChange={(e) => setAspectRatio(e.target.value)}
+              className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm outline-none border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all"
+              disabled={loading}
+            >
+              <option value="16:9">16:9 宽屏</option>
+              <option value="4:3">4:3 标准</option>
+              <option value="A1">A1 海报</option>
+              <option value="A2">A2 海报</option>
+              <option value="A3">A3 海报</option>
+              <option value="A4">A4 海报</option>
+            </select>
+          </div>
+
           {/* 输出类型 */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
               <Layers size={18} className="text-purple-500" />
-              <span className="font-medium text-sm">输出类型 (output type)</span>
+              <span className="font-medium text-sm">输出类型</span>
             </div>
             <select
               value={outputType}
@@ -185,8 +209,8 @@ export default function SearchBox() {
               className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm outline-none border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 transition-all"
               disabled={loading}
             >
-              <option value="freeform">自由生成 (freeform)</option>
-              <option value="templates">模版 (templates)</option>
+              <option value="freeform">自由生成</option>
+              <option value="templates">模版</option>
             </select>
           </div>
 
@@ -194,7 +218,7 @@ export default function SearchBox() {
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
               <Layout size={18} className="text-green-500" />
-              <span className="font-medium text-sm">选择模板 (template)</span>
+              <span className="font-medium text-sm">选择模板</span>
             </div>
             <select
               value={template}

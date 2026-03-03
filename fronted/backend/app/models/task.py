@@ -55,6 +55,7 @@ class Task(BaseModel):
     pages: str = "auto"  # auto, 5, 10, 15, 20
     output_type: str = "freeform"  # freeform (自由生成)
     uploaded_file_id: Optional[str] = None  # 上传文件的 ID
+    aspect_ratio: str = "16:9"  # 幻灯片尺寸比例: 16:9, 4:3, A1, A2, A3, A4
 
 
 class CreateTaskRequest(BaseModel):
@@ -63,6 +64,7 @@ class CreateTaskRequest(BaseModel):
     pages: str = "auto"  # auto, 5, 10, 15, 20
     output_type: str = "freeform"  # freeform (自由生成)
     uploaded_file_id: Optional[str] = None  # 上传文件的 ID
+    aspect_ratio: str = "16:9"  # 幻灯片尺寸比例: 16:9, 4:3, A1, A2, A3, A4
     options: Optional[Dict[str, Any]] = None
 
 
@@ -87,6 +89,7 @@ class WebSocketMessage(BaseModel):
     progress: Optional[int] = None
     error: Optional[str] = None
     artifact: Optional[Artifact] = None
+    file_path: Optional[str] = None
     # 新增字段用于显示 Agent 交互过程
     role: Optional[str] = None  # system, user, assistant, tool
     tool_calls: Optional[List[Dict[str, Any]]] = None  # 工具调用信息

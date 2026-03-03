@@ -1,4 +1,4 @@
-import { CreateTaskRequest, CreateTaskResponse, UploadResponse, Task, Sample, Artifact } from "@/types/task";
+import { CreateTaskRequest, CreateTaskResponse, UploadResponse, Task, Sample, Artifact, AgentMessage } from "@/types/task";
 
 // 动态获取 API 基础 URL
 // 如果环境变量为空，则使用当前页面的 origin（适用于 Nginx 反向代理场景）
@@ -36,6 +36,11 @@ function transformTask(backendTask: any): Task {
     samples: (backendTask.samples || []).map((s: any): Sample => ({
       id: s.id,
       content: s.content || "",
+      messages: (s.messages || []).map((m: any): AgentMessage => ({
+        content: m.content || "",
+        role: m.role,
+        toolCalls: m.tool_calls || m.toolCalls,
+      })),
       status: s.status,
       progress: s.progress || 0,
       createdAt: s.created_at ? s.created_at * 1000 : Date.now(),
@@ -48,6 +53,7 @@ function transformTask(backendTask: any): Task {
     error: backendTask.error,
     artifact: transformArtifact(backendTask.artifact),
     pages: backendTask.pages,
+    aspectRatio: backendTask.aspect_ratio,
     outputType: backendTask.output_type,
     uploadedFileId: backendTask.uploaded_file_id,
   };
@@ -59,6 +65,7 @@ export async function createTask(request: CreateTaskRequest): Promise<CreateTask
     prompt: request.prompt,
     sample_count: request.sampleCount || 1,
     pages: request.pages || "auto",
+    aspect_ratio: request.aspectRatio || "16:9",
     output_type: request.outputType || "freeform",
     uploaded_file_id: request.uploadedFileId,
     options: request.options,
@@ -122,7 +129,15 @@ export async function uploadFiles(files: File[]): Promise<UploadResponse> {
     throw new Error(error.detail || `Failed to upload files: ${response.statusText}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  return {
+    status: data.status,
+    files: (data.files || []).map((f: any) => ({
+      fileId: f.fileId ?? f.file_id,
+      filename: f.filename,
+      size: f.size,
+    })),
+  };
 }
 
 export function getDownloadUrl(taskId: string, sampleIndex?: number): string {
@@ -137,6 +152,13 @@ export function getWorkspaceZipUrl(taskId: string, sampleIndex?: number): string
     return `${API_BASE_URL}/api/download/${taskId}/workspace-zip?sample=${sampleIndex}`;
   }
   return `${API_BASE_URL}/api/download/${taskId}/workspace-zip`;
+}
+
+export function getPdfDownloadUrl(taskId: string, sampleIndex?: number): string {
+  if (sampleIndex !== undefined) {
+    return `${API_BASE_URL}/api/download/${taskId}/pdf?sample=${sampleIndex}`;
+  }
+  return `${API_BASE_URL}/api/download/${taskId}/pdf`;
 }
 
 export function getSlidePreviewUrl(taskId: string, htmlFile: string, sampleIndex?: number): string {
@@ -174,7 +196,8 @@ export async function renameTask(taskId: string, newPrompt: string): Promise<voi
 export interface MessageItem {
   content: string;
   role?: string;
-  tool_calls?: any[];
+  tool_calls?: AgentMessage["toolCalls"];
+  toolCalls?: AgentMessage["toolCalls"];
 }
 
 export async function getTaskMessages(taskId: string): Promise<Record<string, MessageItem[]>> {

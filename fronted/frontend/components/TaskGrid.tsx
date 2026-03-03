@@ -88,22 +88,6 @@ export default function TaskGrid() {
               </div>
             </div>
 
-            {/* 进度条 */}
-            {(task.status === "running" || task.status === "collecting") && (
-              <div className="mb-3">
-                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  <span>整体进度</span>
-                  <span>{task.progress}%</span>
-                </div>
-                <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full transition-all"
-                    style={{ width: `${task.progress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
             {/* 样本网格 */}
             {task.samples.length > 1 && (
               <div className="grid grid-cols-2 gap-2">
@@ -128,14 +112,6 @@ export default function TaskGrid() {
                         );
                       })()}
                     </div>
-                    {sample.status === "running" && (
-                      <div className="bg-gray-200 dark:bg-gray-600 rounded-full h-1">
-                        <div
-                          className="bg-blue-600 h-1 rounded-full transition-all"
-                          style={{ width: `${sample.progress}%` }}
-                        />
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>

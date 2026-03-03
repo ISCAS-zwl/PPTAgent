@@ -18,7 +18,7 @@ export default function Home() {
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* 左侧边栏 */}
       <Sidebar />
 
@@ -73,22 +73,6 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
-
-                  {/* 进度条 */}
-                  {selectedTask.status === 'running' && (
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-gray-600 dark:text-gray-400">生成进度</span>
-                        <span className="text-blue-600 dark:text-blue-400">{selectedTask.progress || 0}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div
-                          className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${selectedTask.progress || 0}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
 
                   {/* 错误信息 */}
                   {selectedTask.error && (

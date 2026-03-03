@@ -45,6 +45,7 @@ async def create_task(request: CreateTaskRequest):
         samples=samples,
         options=request.options or {},
         pages=request.pages,
+        aspect_ratio=request.aspect_ratio,
         output_type=request.output_type,
         uploaded_file_id=request.uploaded_file_id,
     )

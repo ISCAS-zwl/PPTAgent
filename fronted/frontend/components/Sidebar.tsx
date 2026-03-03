@@ -168,7 +168,7 @@ export default function Sidebar() {
       {/* Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
         {!isSidebarCollapsed && (
-          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-xl font-bold text-gray-800 dark:text-gray-200">
             PPTAgent
           </h1>
         )}
@@ -191,8 +191,8 @@ export default function Sidebar() {
           onClick={handleNewTask}
           className={`
             w-full flex items-center gap-3 px-4 py-3 rounded-xl
-            bg-gradient-to-r from-blue-600 to-purple-600 text-white
-            hover:from-blue-700 hover:to-purple-700
+            bg-gray-700 dark:bg-gray-600 text-white
+            hover:bg-gray-800 dark:hover:bg-gray-700
             transition-all duration-200 shadow-md hover:shadow-lg
             ${isSidebarCollapsed ? "justify-center px-2" : ""}
           `}
@@ -304,21 +304,6 @@ export default function Sidebar() {
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                           {formatTime(task.createdAt)}
                         </p>
-                        {/* Progress Bar for Running Tasks */}
-                        {task.status === "running" && (
-                          <div className="mt-2">
-                            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                              <span>进度</span>
-                              <span>{task.progress || 0}%</span>
-                            </div>
-                            <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-300"
-                                style={{ width: `${task.progress || 0}%` }}
-                              />
-                            </div>
-                          </div>
-                        )}
                       </div>
 
                       {/* 三点菜单按钮 */}

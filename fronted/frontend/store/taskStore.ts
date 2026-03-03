@@ -1,8 +1,8 @@
 "use client";
 
 import { create } from 'zustand';
-import { Task, Sample, WebSocketMessage, TaskStatus } from '@/types/task';
-import { getTaskMessages, MessageItem } from '@/lib/api';
+import { Task, Sample, WebSocketMessage, AgentMessage } from '@/types/task';
+import { getTaskMessages } from '@/lib/api';
 
 export type SidebarView = "new" | "all" | "search";
 
@@ -21,6 +21,7 @@ interface TaskStore {
   addTask: (task: Task) => void;
   updateTask: (taskId: string, updates: Partial<Task>) => void;
   updateSample: (taskId: string, sampleId: string, updates: Partial<Sample>) => void;
+  appendSampleMessage: (taskId: string, sampleId: string, message: AgentMessage) => void;
   appendSampleContent: (taskId: string, sampleId: string, content: string) => void;
   selectTask: (taskId: string | null) => void;
   connectWebSocket: () => void;
@@ -54,6 +55,14 @@ function getWsUrl(): string {
 }
 
 const WS_URL = getWsUrl();
+
+function normalizeToolCalls(raw: any): AgentMessage["toolCalls"] {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.map((tc: any) => ({
+    name: tc?.name || "unknown",
+    arguments: tc?.arguments,
+  }));
+}
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: [],
@@ -102,6 +111,28 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
               ...task,
               samples: task.samples.map((sample) =>
                 sample.id === sampleId ? { ...sample, ...updates } : sample
+              ),
+              updatedAt: Date.now(),
+            }
+          : task
+      ),
+    }));
+  },
+
+  appendSampleMessage: (taskId, sampleId, message) => {
+    set((state) => ({
+      tasks: state.tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              samples: task.samples.map((sample) =>
+                sample.id === sampleId
+                  ? {
+                      ...sample,
+                      content: sample.content + (message.content || "") + "\n\n",
+                      messages: [...(sample.messages || []), message],
+                    }
+                  : sample
               ),
               updatedAt: Date.now(),
             }
@@ -188,6 +219,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     const taskId = message.taskId || (message as any).task_id;
     const sampleId = message.sampleId || (message as any).sample_id;
     const { content, status, progress, error, artifact } = message;
+    const filePath = (message as any).filePath || (message as any).file_path;
+    const role = message.role || (message as any).role;
+    const toolCalls = normalizeToolCalls(message.toolCalls || (message as any).tool_calls);
 
     console.log(`[WebSocket] Received message: type=${type}, taskId=${taskId?.slice(0, 8)}, sampleId=${sampleId?.slice(0, 16) || 'none'}, content length=${content?.length || 0}`);
 
@@ -201,6 +235,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         break;
 
       case 'chunk':
+        if (sampleId && filePath) {
+          get().updateSample(taskId, sampleId, { filePath });
+        }
         if (content) {
           const task = get().tasks.find(t => t.id === taskId);
           console.log(`[WebSocket] Processing chunk for task ${taskId.slice(0, 8)}, task found: ${!!task}, samples: ${task?.samples?.length || 0}`);
@@ -209,7 +246,11 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
             if (task.samples.length > 0) {
               // 如果指定了 sampleId，追加到对应样本；否则追加到第一个样本
               const targetSampleId = sampleId || task.samples[0].id;
-              get().appendSampleContent(taskId, targetSampleId, content + "\n\n");
+              get().appendSampleMessage(taskId, targetSampleId, {
+                content,
+                role,
+                toolCalls,
+              });
             } else {
               // 如果没有样本，创建一个临时样本来存储内容
               console.log(`[WebSocket] No samples found, creating temporary sample`);
@@ -221,6 +262,11 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                         samples: [{
                           id: `${taskId}-sample-0`,
                           content: content + "\n\n",
+                          messages: [{
+                            content,
+                            role,
+                            toolCalls,
+                          }],
                           status: 'running' as const,
                           progress: 0,
                           createdAt: Date.now(),
@@ -239,7 +285,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         if (progress !== undefined) {
           if (sampleId) {
             // 更新特定样本的进度
-            get().updateSample(taskId, sampleId, { progress, status: 'running' });
+            const sampleUpdates: Partial<Sample> = { progress, status: 'running' };
+            if (filePath) sampleUpdates.filePath = filePath;
+            get().updateSample(taskId, sampleId, sampleUpdates);
           } else {
             // 更新任务整体进度
             get().updateTask(taskId, { progress });
@@ -260,11 +308,13 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
         // 如果有 sampleId，也更新对应样本的状态
         if (sampleId) {
-          get().updateSample(taskId, sampleId, {
+          const sampleUpdates: Partial<Sample> = {
             status: 'completed',
             progress: 100,
             artifact,
-          });
+          };
+          if (filePath) sampleUpdates.filePath = filePath;
+          get().updateSample(taskId, sampleId, sampleUpdates);
         }
         break;
 
@@ -372,13 +422,19 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
               const sampleMessages = messages[sample.id] || [];
               if (sampleMessages.length === 0) return sample;
 
-              // 将消息历史合并为内容字符串
-              const content = sampleMessages.map(m => m.content).join("\n\n");
-              return { ...sample, content };
+              const normalizedMessages: AgentMessage[] = sampleMessages.map((m) => ({
+                content: m.content || "",
+                role: m.role,
+                toolCalls: normalizeToolCalls(m.tool_calls || m.toolCalls),
+              }));
+
+              // 保留 content 字段兼容现有逻辑（如幻灯片链接提取）
+              const content = normalizedMessages.map((m) => m.content).join("\n\n");
+              return { ...sample, content, messages: normalizedMessages };
             }),
           };
         }),
-        loadedMessageTaskIds: new Set([...state.loadedMessageTaskIds, taskId]),
+        loadedMessageTaskIds: new Set(Array.from(state.loadedMessageTaskIds).concat(taskId)),
       }));
 
       console.log(`[TaskStore] Loaded messages for task ${taskId.slice(0, 8)}`);

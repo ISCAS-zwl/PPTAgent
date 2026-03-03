@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
-from typing import List
+from typing import List, Any
+import asyncio
 import os
 import shutil
 import uuid
@@ -22,6 +23,104 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # 允许的文件类型
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".pptx", ".ppt"}
+
+
+def _resolve_generated_file_path(task: Any, sample: int = None) -> Path:
+    """解析任务/样本生成文件路径并校验存在性。"""
+    file_path = None
+
+    if sample is not None:
+        if sample < 0 or sample >= len(task.samples):
+            raise HTTPException(status_code=400, detail=f"Invalid sample index: {sample}")
+
+        sample_obj = task.samples[sample]
+        if hasattr(sample_obj, "file_path") and sample_obj.file_path:
+            file_path = sample_obj.file_path
+        else:
+            file_paths = task.options.get("generated_file_paths", [])
+            if sample < len(file_paths):
+                file_path = file_paths[sample]
+
+    if not file_path:
+        file_path = task.options.get("generated_file_path")
+
+    if not file_path:
+        raise HTTPException(status_code=404, detail="No file generated for this task")
+
+    if file_path.startswith("/opt/workspace"):
+        file_path = file_path.replace("/opt/workspace", settings.pptagent_workspace, 1)
+
+    target_file = Path(file_path)
+    if not target_file.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {target_file}")
+
+    return target_file
+
+
+async def _run_command(command: list[str]) -> tuple[int, str, str]:
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate()
+    return (
+        process.returncode,
+        stdout.decode(errors="ignore"),
+        stderr.decode(errors="ignore"),
+    )
+
+
+async def _ensure_pdf_file(source_file: Path) -> Path:
+    """确保存在可下载 PDF：源文件是 PDF 直接返回，否则尝试从 PPT/PPTX 转换。"""
+    ext = source_file.suffix.lower()
+    if ext == ".pdf":
+        return source_file
+    if ext not in {".pptx", ".ppt"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported source file type: {ext}")
+
+    pdf_path = source_file.with_suffix(".pdf")
+    if pdf_path.exists():
+        try:
+            if pdf_path.stat().st_size > 0 and pdf_path.stat().st_mtime >= source_file.stat().st_mtime:
+                return pdf_path
+        except OSError:
+            pass
+
+    errors: list[str] = []
+
+    unoconvert_path = shutil.which("unoconvert")
+    if unoconvert_path:
+        code, stdout, stderr = await _run_command([unoconvert_path, str(source_file), str(pdf_path)])
+        if code == 0 and pdf_path.exists() and pdf_path.stat().st_size > 0:
+            return pdf_path
+        errors.append(stderr.strip() or stdout.strip() or f"unoconvert exited with code {code}")
+
+    soffice_path = shutil.which("soffice")
+    if soffice_path:
+        with tempfile.TemporaryDirectory(prefix="soffice-profile-") as profile_dir:
+            profile_uri = Path(profile_dir).as_uri()
+            code, stdout, stderr = await _run_command(
+                [
+                    soffice_path,
+                    f"-env:UserInstallation={profile_uri}",
+                    "--headless",
+                    "--convert-to",
+                    "pdf",
+                    str(source_file),
+                    "--outdir",
+                    str(source_file.parent),
+                ]
+            )
+        if code == 0 and pdf_path.exists() and pdf_path.stat().st_size > 0:
+            return pdf_path
+        errors.append(stderr.strip() or stdout.strip() or f"soffice exited with code {code}")
+
+    if not unoconvert_path and not soffice_path:
+        detail = "PDF converter not found. Please install soffice or unoconvert."
+    else:
+        detail = "Failed to convert PPT to PDF: " + " | ".join(err for err in errors if err)
+    raise HTTPException(status_code=500, detail=detail)
 
 
 @router.post("/upload")
@@ -82,40 +181,10 @@ async def download_file(task_id: str, sample: int = None):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    file_path = None
-
-    # 如果指定了样本索引，获取该样本的文件路径
-    if sample is not None:
-        if sample < 0 or sample >= len(task.samples):
-            raise HTTPException(status_code=400, detail=f"Invalid sample index: {sample}")
-
-        sample_obj = task.samples[sample]
-        # 优先从样本的 file_path 获取
-        if hasattr(sample_obj, 'file_path') and sample_obj.file_path:
-            file_path = sample_obj.file_path
-        else:
-            # 尝试从 options 中的 generated_file_paths 获取
-            file_paths = task.options.get("generated_file_paths", [])
-            if sample < len(file_paths):
-                file_path = file_paths[sample]
-
-    # 如果没有指定样本或样本没有文件，使用任务的默认文件路径
-    if not file_path:
-        file_path = task.options.get("generated_file_path")
-
-    if not file_path:
-        raise HTTPException(status_code=404, detail="No file generated for this task")
-
-    # 转换路径：DeepPresenter 容器使用 /opt/workspace，后端容器使用 /workspace
-    if file_path.startswith("/opt/workspace"):
-        file_path = file_path.replace("/opt/workspace", settings.pptagent_workspace, 1)
-
-    # 检查文件是否存在
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    target_file = _resolve_generated_file_path(task, sample)
 
     # 根据文件扩展名确定 MIME 类型
-    filename = os.path.basename(file_path)
+    filename = target_file.name
     ext = os.path.splitext(filename)[1].lower()
 
     if ext == ".pdf":
@@ -127,9 +196,28 @@ async def download_file(task_id: str, sample: int = None):
 
     # 返回文件
     return FileResponse(
-        path=file_path,
+        path=target_file,
         filename=filename,
         media_type=media_type,
+    )
+
+
+@router.get("/download/{task_id}/pdf")
+async def download_pdf_file(task_id: str, sample: int = None):
+    """下载生成文件对应的 PDF 版本（按需从 PPT/PPTX 转换）。"""
+    from app.services.task_service import TaskService
+
+    task = await TaskService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    source_file = _resolve_generated_file_path(task, sample)
+    pdf_file = await _ensure_pdf_file(source_file)
+
+    return FileResponse(
+        path=pdf_file,
+        filename=pdf_file.name,
+        media_type="application/pdf",
     )
 
 
@@ -142,31 +230,7 @@ async def download_workspace_zip(task_id: str, background_tasks: BackgroundTasks
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    file_path = None
-
-    # 与下载主文件一致的路径解析逻辑
-    if sample is not None:
-        if sample < 0 or sample >= len(task.samples):
-            raise HTTPException(status_code=400, detail=f"Invalid sample index: {sample}")
-        sample_obj = task.samples[sample]
-        if hasattr(sample_obj, 'file_path') and sample_obj.file_path:
-            file_path = sample_obj.file_path
-        else:
-            file_paths = task.options.get("generated_file_paths", [])
-            if sample < len(file_paths):
-                file_path = file_paths[sample]
-
-    if not file_path:
-        file_path = task.options.get("generated_file_path")
-
-    if not file_path:
-        raise HTTPException(status_code=404, detail="No file generated for this task")
-
-    # 统一路径前缀
-    if file_path.startswith("/opt/workspace"):
-        file_path = file_path.replace("/opt/workspace", settings.pptagent_workspace, 1)
-
-    target_file = Path(file_path)
+    target_file = _resolve_generated_file_path(task, sample)
     base_dir = target_file.parent
 
     if not base_dir.exists():
@@ -281,28 +345,45 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
     # 重写相对路径的图片为API路径
     import re
 
+    sample_suffix = f"?sample={sample}" if sample is not None else ""
+
+    def append_sample_query(url: str) -> str:
+        if sample is None:
+            return url
+        if "sample=" in url:
+            return url
+        return f"{url}{'&' if '?' in url else '?'}sample={sample}"
+
     def replace_relative_img_src(match):
         full_match = match.group(0)
         src_value = match.group(1)
 
-        # 只处理相对路径（不以http、https、/开头）
-        if src_value.startswith(('http://', 'https://', '/api/', 'data:')):
+        # 直接返回外链与 data URI
+        if src_value.startswith(('http://', 'https://', 'data:')):
+            return full_match
+
+        # 对已有 API 资源路径补充 sample 参数（多样本预览时）
+        if src_value.startswith('/api/preview/asset/'):
+            new_src = append_sample_query(src_value)
+            return f'src="{new_src}"'
+
+        if src_value.startswith('/api/'):
             return full_match
 
         # 处理相对路径
         if src_value.startswith('../'):
             # ../assets/image.png -> assets/image.png
             relative_path = src_value.replace('../', '')
-            new_src = f"/api/preview/asset/{task_id}/{relative_path}"
+            new_src = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
             return f'src="{new_src}"'
         elif src_value.startswith('./'):
             # ./image.png -> slides/image.png (假设HTML在slides目录)
             relative_path = src_value.replace('./', 'slides/')
-            new_src = f"/api/preview/asset/{task_id}/{relative_path}"
+            new_src = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
             return f'src="{new_src}"'
         elif not src_value.startswith('/'):
             # image.png -> slides/image.png
-            new_src = f"/api/preview/asset/{task_id}/slides/{src_value}"
+            new_src = f"/api/preview/asset/{task_id}/slides/{src_value}{sample_suffix}"
             return f'src="{new_src}"'
 
         return full_match
@@ -310,6 +391,59 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
     # 替换所有img src属性
     html_content = re.sub(r'src="([^"]+)"', replace_relative_img_src, html_content)
     html_content = re.sub(r"src='([^']+)'", lambda m: replace_relative_img_src(m).replace('"', "'"), html_content)
+
+    # 处理CSS中的background-image和url()
+    def replace_css_url(match):
+        full_match = match.group(0)
+        url_value = match.group(1).strip('\'"')
+
+        # 跳过 HTTP 路径或 data URI
+        if url_value.startswith(('http://', 'https://', 'data:')):
+            return full_match
+
+        # 对已有 API 资源路径补充 sample 参数（多样本预览时）
+        if url_value.startswith('/api/preview/asset/'):
+            new_url = append_sample_query(url_value)
+            return f'url("{new_url}")'
+
+        if url_value.startswith('/api/'):
+            return full_match
+
+        # 处理绝对路径（如 /opt/workspace/...）
+        if url_value.startswith('/opt/workspace/'):
+            # 提取相对于工作区的路径
+            # /opt/workspace/20260301/6dba2423/image.png -> image.png
+            parts = url_value.split('/')
+            if len(parts) >= 5:
+                # 找到短ID后面的路径部分
+                short_id_index = -1
+                for i, part in enumerate(parts):
+                    if len(part) == 8 and i >= 4:  # 短ID通常是8位
+                        short_id_index = i
+                        break
+                if short_id_index > 0 and short_id_index + 1 < len(parts):
+                    relative_path = '/'.join(parts[short_id_index + 1:])
+                    new_url = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
+                    return f'url("{new_url}")'
+            return full_match
+
+        # 处理相对路径
+        if url_value.startswith('../'):
+            relative_path = url_value.replace('../', '')
+            new_url = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
+            return f'url("{new_url}")'
+        elif url_value.startswith('./'):
+            relative_path = url_value.replace('./', 'slides/')
+            new_url = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
+            return f'url("{new_url}")'
+        elif not url_value.startswith('/'):
+            new_url = f"/api/preview/asset/{task_id}/slides/{url_value}{sample_suffix}"
+            return f'url("{new_url}")'
+
+        return full_match
+
+    # 替换CSS中的url()
+    html_content = re.sub(r'url\(["\']?([^)]+?)["\']?\)', replace_css_url, html_content)
 
     # 返回修改后的HTML内容
     from fastapi.responses import HTMLResponse
