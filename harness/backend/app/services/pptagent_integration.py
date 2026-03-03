@@ -3,19 +3,21 @@ PPTAgent 集成模块
 将现有的 PPTAgent 功能集成到任务处理系统中
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 # 添加 PPTAgent 到 Python 路径
 PPTAGENT_ROOT = Path(__file__).parent.parent.parent.parent.parent / "pptagent"
 sys.path.insert(0, str(PPTAGENT_ROOT))
 
 try:
-    from pptagent import PPTAgentServer
     from pptagent.pptgen import PPTGenerator
     from pptagent.utils import setup_workspace
+
+    from pptagent import PPTAgentServer
+
     PPTAGENT_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: PPTAgent not available: {e}")
@@ -25,7 +27,7 @@ except ImportError as e:
 class PPTAgentIntegration:
     """PPTAgent 集成类"""
 
-    def __init__(self, workspace: Optional[str] = None):
+    def __init__(self, workspace: str | None = None):
         self.workspace = workspace or "/tmp/pptagent_workspace"
         self.agent = None
         if PPTAGENT_AVAILABLE:
@@ -35,10 +37,8 @@ class PPTAgentIntegration:
                 print(f"Failed to initialize PPTAgent: {e}")
 
     async def generate_ppt(
-        self,
-        prompt: str,
-        options: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, prompt: str, options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         生成 PPT
 
@@ -85,10 +85,8 @@ class PPTAgentIntegration:
             }
 
     async def _call_pptagent(
-        self,
-        prompt: str,
-        options: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, prompt: str, options: dict[str, Any]
+    ) -> dict[str, Any]:
         """调用 PPTAgent 核心功能"""
         # 这里实现实际的 PPTAgent 调用逻辑
         # 根据现有的 PPTAgent API 进行调用
@@ -111,7 +109,7 @@ class PPTAgentIntegration:
             "metadata": {
                 "template": template,
                 "style": style,
-            }
+            },
         }
 
     def _generate_fallback_content(self, prompt: str) -> str:
@@ -138,7 +136,7 @@ class PPTAgentIntegration:
 *注意：这是自动生成的大纲。完整的 PPT 生成功能需要 PPTAgent 支持。*
 """
 
-    async def analyze_document(self, file_path: str) -> Dict[str, Any]:
+    async def analyze_document(self, file_path: str) -> dict[str, Any]:
         """分析文档内容"""
         if not PPTAGENT_AVAILABLE:
             return {"success": False, "error": "PPTAgent not available"}
@@ -153,7 +151,7 @@ class PPTAgentIntegration:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def evaluate_ppt(self, file_path: str) -> Dict[str, Any]:
+    async def evaluate_ppt(self, file_path: str) -> dict[str, Any]:
         """评估 PPT 质量"""
         if not PPTAGENT_AVAILABLE:
             return {"success": False, "error": "PPTAgent not available"}

@@ -61,7 +61,7 @@ def _rewrite_image_link(match: re.Match[str], md_dir: Path, task_id: str = None)
             path_parts = abs_path.parts
             if task_id in path_parts:
                 task_idx = path_parts.index(task_id)
-                relative_path = "/".join(path_parts[task_idx + 1:])
+                relative_path = "/".join(path_parts[task_idx + 1 :])
                 new_path = f"/api/preview/asset/{task_id}/{relative_path}"
             else:
                 # Fallback to absolute path if task_id not found in path
@@ -281,7 +281,9 @@ def _rewrite_html_image_paths(html_file: Path, task_id: str) -> None:
         src_value = match.group(1)
 
         # Only process absolute file system paths
-        if not (src_value.startswith("/opt/workspace") or src_value.startswith("/workspace")):
+        if not (
+            src_value.startswith("/opt/workspace") or src_value.startswith("/workspace")
+        ):
             return full_match
 
         # Extract relative path from the task directory
@@ -292,7 +294,7 @@ def _rewrite_html_image_paths(html_file: Path, task_id: str) -> None:
             # Find task_id in the path
             if task_id in path_parts:
                 task_idx = path_parts.index(task_id)
-                relative_path = "/".join(path_parts[task_idx + 1:])
+                relative_path = "/".join(path_parts[task_idx + 1 :])
                 new_src = f"/api/preview/asset/{task_id}/{relative_path}"
                 return f'src="{new_src}"'
         except Exception as e:
@@ -301,17 +303,17 @@ def _rewrite_html_image_paths(html_file: Path, task_id: str) -> None:
         return full_match
 
     # Replace img src attributes
-    content = re.sub(
-        r'src="([^"]+)"',
-        replace_img_src,
-        content
-    )
+    content = re.sub(r'src="([^"]+)"', replace_img_src, content)
 
     # Also handle single quotes
     content = re.sub(
         r"src='([^']+)'",
-        lambda m: replace_img_src(m).replace('"', "'") if replace_img_src(m) != m.group(0) else m.group(0),
-        content
+        lambda m: (
+            replace_img_src(m).replace('"', "'")
+            if replace_img_src(m) != m.group(0)
+            else m.group(0)
+        ),
+        content,
     )
 
     # Write back to file

@@ -1,15 +1,17 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
-from typing import List, Any
 import asyncio
 import os
 import shutil
-import uuid
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
-from app.core.config import settings
+from typing import Any, List
 from urllib.parse import unquote
+
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+
+from app.core.config import settings
 
 router = APIRouter(prefix="/api", tags=["files"])
 
@@ -31,7 +33,9 @@ def _resolve_generated_file_path(task: Any, sample: int = None) -> Path:
 
     if sample is not None:
         if sample < 0 or sample >= len(task.samples):
-            raise HTTPException(status_code=400, detail=f"Invalid sample index: {sample}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid sample index: {sample}"
+            )
 
         sample_obj = task.samples[sample]
         if hasattr(sample_obj, "file_path") and sample_obj.file_path:
@@ -77,12 +81,17 @@ async def _ensure_pdf_file(source_file: Path) -> Path:
     if ext == ".pdf":
         return source_file
     if ext not in {".pptx", ".ppt"}:
-        raise HTTPException(status_code=400, detail=f"Unsupported source file type: {ext}")
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported source file type: {ext}"
+        )
 
     pdf_path = source_file.with_suffix(".pdf")
     if pdf_path.exists():
         try:
-            if pdf_path.stat().st_size > 0 and pdf_path.stat().st_mtime >= source_file.stat().st_mtime:
+            if (
+                pdf_path.stat().st_size > 0
+                and pdf_path.stat().st_mtime >= source_file.stat().st_mtime
+            ):
                 return pdf_path
         except OSError:
             pass
@@ -91,10 +100,14 @@ async def _ensure_pdf_file(source_file: Path) -> Path:
 
     unoconvert_path = shutil.which("unoconvert")
     if unoconvert_path:
-        code, stdout, stderr = await _run_command([unoconvert_path, str(source_file), str(pdf_path)])
+        code, stdout, stderr = await _run_command(
+            [unoconvert_path, str(source_file), str(pdf_path)]
+        )
         if code == 0 and pdf_path.exists() and pdf_path.stat().st_size > 0:
             return pdf_path
-        errors.append(stderr.strip() or stdout.strip() or f"unoconvert exited with code {code}")
+        errors.append(
+            stderr.strip() or stdout.strip() or f"unoconvert exited with code {code}"
+        )
 
     soffice_path = shutil.which("soffice")
     if soffice_path:
@@ -114,17 +127,21 @@ async def _ensure_pdf_file(source_file: Path) -> Path:
             )
         if code == 0 and pdf_path.exists() and pdf_path.stat().st_size > 0:
             return pdf_path
-        errors.append(stderr.strip() or stdout.strip() or f"soffice exited with code {code}")
+        errors.append(
+            stderr.strip() or stdout.strip() or f"soffice exited with code {code}"
+        )
 
     if not unoconvert_path and not soffice_path:
         detail = "PDF converter not found. Please install soffice or unoconvert."
     else:
-        detail = "Failed to convert PPT to PDF: " + " | ".join(err for err in errors if err)
+        detail = "Failed to convert PPT to PDF: " + " | ".join(
+            err for err in errors if err
+        )
     raise HTTPException(status_code=500, detail=detail)
 
 
 @router.post("/upload")
-async def upload_files(files: List[UploadFile] = File(...)):
+async def upload_files(files: list[UploadFile] = File(...)):
     """上传文件"""
     uploaded_files = []
 
@@ -147,13 +164,15 @@ async def upload_files(files: List[UploadFile] = File(...)):
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            uploaded_files.append({
-                "file_id": file_id,
-                "filename": file.filename,
-                "safe_filename": safe_filename,
-                "path": str(file_path),
-                "size": os.path.getsize(file_path),
-            })
+            uploaded_files.append(
+                {
+                    "file_id": file_id,
+                    "filename": file.filename,
+                    "safe_filename": safe_filename,
+                    "path": str(file_path),
+                    "size": os.path.getsize(file_path),
+                }
+            )
 
         return {
             "status": "success",
@@ -190,7 +209,9 @@ async def download_file(task_id: str, sample: int = None):
     if ext == ".pdf":
         media_type = "application/pdf"
     elif ext in [".pptx", ".ppt"]:
-        media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        media_type = (
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        )
     else:
         media_type = "application/octet-stream"
 
@@ -222,7 +243,9 @@ async def download_pdf_file(task_id: str, sample: int = None):
 
 
 @router.get("/download/{task_id}/workspace-zip")
-async def download_workspace_zip(task_id: str, background_tasks: BackgroundTasks, sample: int = None):
+async def download_workspace_zip(
+    task_id: str, background_tasks: BackgroundTasks, sample: int = None
+):
     """打包单次 PPT 生成所在目录为 ZIP，排除 history/.history 目录及隐藏文件。"""
     from app.services.task_service import TaskService
 
@@ -234,7 +257,9 @@ async def download_workspace_zip(task_id: str, background_tasks: BackgroundTasks
     base_dir = target_file.parent
 
     if not base_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Workspace folder not found: {base_dir}")
+        raise HTTPException(
+            status_code=404, detail=f"Workspace folder not found: {base_dir}"
+        )
 
     tmp_dir = Path(tempfile.gettempdir())
     zip_path = tmp_dir / f"{task_id}-workspace.zip"
@@ -243,9 +268,11 @@ async def download_workspace_zip(task_id: str, background_tasks: BackgroundTasks
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(base_dir):
                 # 排除 history/.history 目录和隐藏目录
-                dirs[:] = [d for d in dirs if not d.startswith('.') and d.lower() != 'history']
+                dirs[:] = [
+                    d for d in dirs if not d.startswith(".") and d.lower() != "history"
+                ]
                 for fname in files:
-                    if fname.startswith('.'):
+                    if fname.startswith("."):
                         continue
                     full_path = Path(root) / fname
                     if full_path.is_file():
@@ -255,7 +282,9 @@ async def download_workspace_zip(task_id: str, background_tasks: BackgroundTasks
     except Exception as e:
         if zip_path.exists():
             zip_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail=f"Failed to create workspace zip: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create workspace zip: {e}"
+        )
 
     background_tasks.add_task(lambda p=zip_path: p.unlink(missing_ok=True))
 
@@ -285,9 +314,11 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
         # 与下载逻辑一致，确定基准目录
         if sample is not None:
             if sample < 0 or sample >= len(task.samples):
-                raise HTTPException(status_code=400, detail=f"Invalid sample index: {sample}")
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid sample index: {sample}"
+                )
             sample_obj = task.samples[sample]
-            if hasattr(sample_obj, 'file_path') and sample_obj.file_path:
+            if hasattr(sample_obj, "file_path") and sample_obj.file_path:
                 file_path = sample_obj.file_path
             else:
                 file_paths = task.options.get("generated_file_paths", [])
@@ -299,7 +330,9 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
 
         if file_path:
             if file_path.startswith("/opt/workspace"):
-                file_path = file_path.replace("/opt/workspace", settings.pptagent_workspace, 1)
+                file_path = file_path.replace(
+                    "/opt/workspace", settings.pptagent_workspace, 1
+                )
             base_dir = Path(file_path).parent.resolve()
 
     # 如果无法从任务获取基准目录，尝试直接定位任务目录
@@ -310,7 +343,7 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
         try:
             # 搜索所有日期目录下的任务目录
             for date_dir in workspace_root.iterdir():
-                if not date_dir.is_dir() or date_dir.name.startswith('.'):
+                if not date_dir.is_dir() or date_dir.name.startswith("."):
                     continue
                 possible = date_dir / task_id
                 if possible.is_dir():
@@ -339,7 +372,7 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
         raise HTTPException(status_code=404, detail="HTML file not found")
 
     # 读取HTML内容并重写图片路径
-    with open(candidate, 'r', encoding='utf-8') as f:
+    with open(candidate, encoding="utf-8") as f:
         html_content = f.read()
 
     # 重写相对路径的图片为API路径
@@ -359,29 +392,29 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
         src_value = match.group(1)
 
         # 直接返回外链与 data URI
-        if src_value.startswith(('http://', 'https://', 'data:')):
+        if src_value.startswith(("http://", "https://", "data:")):
             return full_match
 
         # 对已有 API 资源路径补充 sample 参数（多样本预览时）
-        if src_value.startswith('/api/preview/asset/'):
+        if src_value.startswith("/api/preview/asset/"):
             new_src = append_sample_query(src_value)
             return f'src="{new_src}"'
 
-        if src_value.startswith('/api/'):
+        if src_value.startswith("/api/"):
             return full_match
 
         # 处理相对路径
-        if src_value.startswith('../'):
+        if src_value.startswith("../"):
             # ../assets/image.png -> assets/image.png
-            relative_path = src_value.replace('../', '')
+            relative_path = src_value.replace("../", "")
             new_src = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
             return f'src="{new_src}"'
-        elif src_value.startswith('./'):
+        elif src_value.startswith("./"):
             # ./image.png -> slides/image.png (假设HTML在slides目录)
-            relative_path = src_value.replace('./', 'slides/')
+            relative_path = src_value.replace("./", "slides/")
             new_src = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
             return f'src="{new_src}"'
-        elif not src_value.startswith('/'):
+        elif not src_value.startswith("/"):
             # image.png -> slides/image.png
             new_src = f"/api/preview/asset/{task_id}/slides/{src_value}{sample_suffix}"
             return f'src="{new_src}"'
@@ -390,30 +423,34 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
 
     # 替换所有img src属性
     html_content = re.sub(r'src="([^"]+)"', replace_relative_img_src, html_content)
-    html_content = re.sub(r"src='([^']+)'", lambda m: replace_relative_img_src(m).replace('"', "'"), html_content)
+    html_content = re.sub(
+        r"src='([^']+)'",
+        lambda m: replace_relative_img_src(m).replace('"', "'"),
+        html_content,
+    )
 
     # 处理CSS中的background-image和url()
     def replace_css_url(match):
         full_match = match.group(0)
-        url_value = match.group(1).strip('\'"')
+        url_value = match.group(1).strip("'\"")
 
         # 跳过 HTTP 路径或 data URI
-        if url_value.startswith(('http://', 'https://', 'data:')):
+        if url_value.startswith(("http://", "https://", "data:")):
             return full_match
 
         # 对已有 API 资源路径补充 sample 参数（多样本预览时）
-        if url_value.startswith('/api/preview/asset/'):
+        if url_value.startswith("/api/preview/asset/"):
             new_url = append_sample_query(url_value)
             return f'url("{new_url}")'
 
-        if url_value.startswith('/api/'):
+        if url_value.startswith("/api/"):
             return full_match
 
         # 处理绝对路径（如 /opt/workspace/...）
-        if url_value.startswith('/opt/workspace/'):
+        if url_value.startswith("/opt/workspace/"):
             # 提取相对于工作区的路径
             # /opt/workspace/20260301/6dba2423/image.png -> image.png
-            parts = url_value.split('/')
+            parts = url_value.split("/")
             if len(parts) >= 5:
                 # 找到短ID后面的路径部分
                 short_id_index = -1
@@ -422,21 +459,23 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
                         short_id_index = i
                         break
                 if short_id_index > 0 and short_id_index + 1 < len(parts):
-                    relative_path = '/'.join(parts[short_id_index + 1:])
-                    new_url = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
+                    relative_path = "/".join(parts[short_id_index + 1 :])
+                    new_url = (
+                        f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
+                    )
                     return f'url("{new_url}")'
             return full_match
 
         # 处理相对路径
-        if url_value.startswith('../'):
-            relative_path = url_value.replace('../', '')
+        if url_value.startswith("../"):
+            relative_path = url_value.replace("../", "")
             new_url = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
             return f'url("{new_url}")'
-        elif url_value.startswith('./'):
-            relative_path = url_value.replace('./', 'slides/')
+        elif url_value.startswith("./"):
+            relative_path = url_value.replace("./", "slides/")
             new_url = f"/api/preview/asset/{task_id}/{relative_path}{sample_suffix}"
             return f'url("{new_url}")'
-        elif not url_value.startswith('/'):
+        elif not url_value.startswith("/"):
             new_url = f"/api/preview/asset/{task_id}/slides/{url_value}{sample_suffix}"
             return f'url("{new_url}")'
 
@@ -447,10 +486,11 @@ async def preview_slide(task_id: str, html_file: str, sample: int = None):
 
     # 返回修改后的HTML内容
     from fastapi.responses import HTMLResponse
+
     return HTMLResponse(
         content=html_content,
         headers={
-            "Content-Disposition": f"inline; filename=\"{candidate.name}\"",
+            "Content-Disposition": f'inline; filename="{candidate.name}"',
         },
     )
 
@@ -479,9 +519,11 @@ async def preview_asset(task_id: str, asset_path: str, sample: int = None):
         # 与下载逻辑一致，确定基准目录
         if sample is not None:
             if sample < 0 or sample >= len(task.samples):
-                raise HTTPException(status_code=400, detail=f"Invalid sample index: {sample}")
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid sample index: {sample}"
+                )
             sample_obj = task.samples[sample]
-            if hasattr(sample_obj, 'file_path') and sample_obj.file_path:
+            if hasattr(sample_obj, "file_path") and sample_obj.file_path:
                 file_path = sample_obj.file_path
             else:
                 file_paths = task.options.get("generated_file_paths", [])
@@ -493,7 +535,9 @@ async def preview_asset(task_id: str, asset_path: str, sample: int = None):
 
         if file_path:
             if file_path.startswith("/opt/workspace"):
-                file_path = file_path.replace("/opt/workspace", settings.pptagent_workspace, 1)
+                file_path = file_path.replace(
+                    "/opt/workspace", settings.pptagent_workspace, 1
+                )
             base_dir = Path(file_path).parent.resolve()
 
     # 如果无法从任务获取基准目录，尝试直接定位任务目录
@@ -504,7 +548,7 @@ async def preview_asset(task_id: str, asset_path: str, sample: int = None):
         try:
             # 搜索所有日期目录下的任务目录
             for date_dir in workspace_root.iterdir():
-                if not date_dir.is_dir() or date_dir.name.startswith('.'):
+                if not date_dir.is_dir() or date_dir.name.startswith("."):
                     continue
                 possible = date_dir / task_id
                 if possible.is_dir():

@@ -5,11 +5,11 @@ PPTAgent 集成模块 V2
 2. 通过 HTTP API 调用 Docker 化的 PPTAgent 服务
 """
 
-import sys
 import os
-from pathlib import Path
-from typing import Optional, Dict, Any
+import sys
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 from app.services.pptagent_docker_client import pptagent_docker_client
 from app.utils import get_logger
@@ -19,9 +19,10 @@ logger = get_logger(__name__)
 
 class IntegrationMode(Enum):
     """集成模式"""
-    LOCAL = "local"      # 本地模块调用
-    DOCKER = "docker"    # Docker HTTP API 调用
-    AUTO = "auto"        # 自动选择
+
+    LOCAL = "local"  # 本地模块调用
+    DOCKER = "docker"  # Docker HTTP API 调用
+    AUTO = "auto"  # 自动选择
 
 
 # 添加 PPTAgent 到 Python 路径
@@ -30,9 +31,11 @@ sys.path.insert(0, str(PPTAGENT_ROOT))
 
 # 尝试导入本地 PPTAgent
 try:
-    from pptagent import PPTAgentServer
     from pptagent.pptgen import PPTGenerator
     from pptagent.utils import setup_workspace
+
+    from pptagent import PPTAgentServer
+
     LOCAL_PPTAGENT_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Local PPTAgent not available: {e}")
@@ -45,7 +48,7 @@ class PPTAgentIntegrationV2:
     def __init__(
         self,
         mode: IntegrationMode = IntegrationMode.AUTO,
-        workspace: Optional[str] = None,
+        workspace: str | None = None,
     ):
         """
         初始化集成模块
@@ -60,7 +63,10 @@ class PPTAgentIntegrationV2:
         self.docker_available = False
 
         # 初始化本地 Agent
-        if LOCAL_PPTAGENT_AVAILABLE and mode in [IntegrationMode.LOCAL, IntegrationMode.AUTO]:
+        if LOCAL_PPTAGENT_AVAILABLE and mode in [
+            IntegrationMode.LOCAL,
+            IntegrationMode.AUTO,
+        ]:
             try:
                 self.local_agent = PPTAgentServer()
                 logger.info("Local PPTAgent initialized successfully")
@@ -104,10 +110,8 @@ class PPTAgentIntegrationV2:
                 return "fallback"
 
     async def generate_ppt(
-        self,
-        prompt: str,
-        options: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, prompt: str, options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         生成 PPT
 
@@ -134,10 +138,8 @@ class PPTAgentIntegrationV2:
             }
 
     async def _generate_via_docker(
-        self,
-        prompt: str,
-        options: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, prompt: str, options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """通过 Docker 服务生成"""
         try:
             result = await pptagent_docker_client.generate_ppt(prompt, options)
@@ -151,10 +153,8 @@ class PPTAgentIntegrationV2:
             }
 
     async def _generate_via_local(
-        self,
-        prompt: str,
-        options: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, prompt: str, options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """通过本地模块生成"""
         try:
             options = options or {}
@@ -177,7 +177,7 @@ class PPTAgentIntegrationV2:
                     "template": template,
                     "style": style,
                     "mode": "local",
-                }
+                },
             }
 
         except Exception as e:
@@ -212,7 +212,7 @@ class PPTAgentIntegrationV2:
 *注意：这是自动生成的大纲。完整的 PPT 生成功能需要 PPTAgent 支持。*
 """
 
-    async def analyze_document(self, file_path: str) -> Dict[str, Any]:
+    async def analyze_document(self, file_path: str) -> dict[str, Any]:
         """分析文档内容"""
         selected_mode = self._select_mode()
 
@@ -227,7 +227,7 @@ class PPTAgentIntegrationV2:
         else:
             return {"success": False, "error": "No service available"}
 
-    async def evaluate_ppt(self, file_path: str) -> Dict[str, Any]:
+    async def evaluate_ppt(self, file_path: str) -> dict[str, Any]:
         """评估 PPT 质量"""
         selected_mode = self._select_mode()
 

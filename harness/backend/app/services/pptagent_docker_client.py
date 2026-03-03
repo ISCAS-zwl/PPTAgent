@@ -5,8 +5,11 @@ PPTAgent Docker 客户端
 
 import asyncio
 import json
-from typing import Optional, Dict, Any, AsyncIterator
+from typing import Any, Dict, Optional
+from collections.abc import AsyncIterator
+
 import httpx
+
 from app.core.config import settings
 from app.utils import get_logger
 
@@ -42,8 +45,8 @@ class PPTAgentDockerClient:
     async def generate_ppt(
         self,
         prompt: str,
-        options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         生成 PPT
 
@@ -74,7 +77,7 @@ class PPTAgentDockerClient:
                     "template": options.get("template", "default"),
                     "style": options.get("style", "professional"),
                     "output_format": options.get("output_format", "pptx"),
-                }
+                },
             )
 
             if response.get("success"):
@@ -100,8 +103,8 @@ class PPTAgentDockerClient:
     async def generate_ppt_stream(
         self,
         prompt: str,
-        options: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        options: dict[str, Any] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         流式生成 PPT（支持实时进度更新）
 
@@ -127,7 +130,7 @@ class PPTAgentDockerClient:
                     "prompt": prompt,
                     "template": options.get("template", "default"),
                     "style": options.get("style", "professional"),
-                }
+                },
             ) as response:
                 async for line in response.aiter_lines():
                     if line.startswith("data: "):
@@ -145,8 +148,8 @@ class PPTAgentDockerClient:
         self,
         endpoint: str,
         method: str = "GET",
-        data: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         调用 PPTAgent API
 
@@ -198,7 +201,7 @@ class PPTAgentDockerClient:
             logger.warning(f"Health check failed: {e}")
             return False
 
-    async def analyze_document(self, file_path: str) -> Dict[str, Any]:
+    async def analyze_document(self, file_path: str) -> dict[str, Any]:
         """
         分析文档内容
 
@@ -210,9 +213,7 @@ class PPTAgentDockerClient:
         """
         try:
             response = await self._call_api(
-                endpoint="/api/analyze",
-                method="POST",
-                data={"file_path": file_path}
+                endpoint="/api/analyze", method="POST", data={"file_path": file_path}
             )
             return response
         except Exception as e:
@@ -222,7 +223,7 @@ class PPTAgentDockerClient:
                 "error": str(e),
             }
 
-    async def evaluate_ppt(self, file_path: str) -> Dict[str, Any]:
+    async def evaluate_ppt(self, file_path: str) -> dict[str, Any]:
         """
         评估 PPT 质量
 
@@ -234,9 +235,7 @@ class PPTAgentDockerClient:
         """
         try:
             response = await self._call_api(
-                endpoint="/api/evaluate",
-                method="POST",
-                data={"file_path": file_path}
+                endpoint="/api/evaluate", method="POST", data={"file_path": file_path}
             )
             return response
         except Exception as e:

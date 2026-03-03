@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     )
 
     @property
-    def cors_origins_list(self) -> List[str]:
+    def cors_origins_list(self) -> list[str]:
         """Convert CORS origins string to list"""
         # 支持 * 通配符，允许所有来源
         if self.cors_origins == "*":

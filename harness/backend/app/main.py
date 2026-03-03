@@ -1,9 +1,11 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
+
+from app.api import files, tasks, websocket
 from app.core.config import settings
 from app.core.redis import close_redis
-from app.api import tasks, websocket, files
 from app.tasks.task_processor import start_task_worker
 
 

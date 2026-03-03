@@ -1,16 +1,18 @@
-from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
 import uuid
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, HTTPException
+
+from app.core.config import settings
 from app.models.task import (
-    Task,
-    Sample,
     CreateTaskRequest,
     CreateTaskResponse,
+    Sample,
+    Task,
     TaskStatus,
 )
 from app.services.task_service import TaskService
 from app.tasks.task_processor import task_queue
-from app.core.config import settings
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -68,7 +70,7 @@ async def get_task(task_id: str):
     return task
 
 
-@router.get("/tasks", response_model=List[Task])
+@router.get("/tasks", response_model=list[Task])
 async def list_tasks(limit: int = 50):
     """列出所有任务"""
     tasks = await TaskService.list_tasks(limit)
@@ -105,7 +107,7 @@ async def update_task(task_id: str, updates: dict):
 
 
 @router.get("/task/{task_id}/messages")
-async def get_task_messages(task_id: str) -> Dict[str, List[Dict[str, Any]]]:
+async def get_task_messages(task_id: str) -> dict[str, list[dict[str, Any]]]:
     """获取任务的完整消息历史"""
     task = await TaskService.get_task(task_id)
     if not task:
@@ -116,7 +118,7 @@ async def get_task_messages(task_id: str) -> Dict[str, List[Dict[str, Any]]]:
 
 
 @router.get("/task/{task_id}/messages/{sample_id}")
-async def get_sample_messages(task_id: str, sample_id: str) -> List[Dict[str, Any]]:
+async def get_sample_messages(task_id: str, sample_id: str) -> list[dict[str, Any]]:
     """获取特定样本的消息历史"""
     task = await TaskService.get_task(task_id)
     if not task:

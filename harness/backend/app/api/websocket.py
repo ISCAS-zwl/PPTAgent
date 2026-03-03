@@ -1,6 +1,8 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from app.services.websocket_manager import manager
 import json
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from app.services.websocket_manager import manager
 
 router = APIRouter(tags=["websocket"])
 
@@ -25,26 +27,32 @@ async def websocket_endpoint(websocket: WebSocket):
                     if task_id:
                         await manager.subscribe_task(websocket, task_id)
                         print(f"[WebSocket] Subscribed to task {task_id[:8]}")
-                        await websocket.send_json({
-                            "type": "subscribed",
-                            "task_id": task_id,
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "subscribed",
+                                "task_id": task_id,
+                            }
+                        )
 
                 # 处理取消订阅请求
                 elif message_type == "unsubscribe":
                     task_id = message.get("task_id")
                     if task_id:
                         await manager.unsubscribe_task(websocket, task_id)
-                        await websocket.send_json({
-                            "type": "unsubscribed",
-                            "task_id": task_id,
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "unsubscribed",
+                                "task_id": task_id,
+                            }
+                        )
 
             except json.JSONDecodeError:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Invalid JSON",
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Invalid JSON",
+                    }
+                )
 
     except WebSocketDisconnect:
         print(f"[WebSocket] Connection disconnected")
