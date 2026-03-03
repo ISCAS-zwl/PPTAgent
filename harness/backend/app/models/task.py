@@ -1,13 +1,14 @@
-from enum import Enum
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def to_camel(string: str) -> str:
     """将 snake_case 转换为 camelCase"""
-    components = string.split('_')
-    return components[0] + ''.join(x.title() for x in components[1:])
+    components = string.split("_")
+    return components[0] + "".join(x.title() for x in components[1:])
 
 
 class TaskStatus(str, Enum):
@@ -28,7 +29,7 @@ class ArtifactType(str, Enum):
 class Artifact(BaseModel):
     type: ArtifactType
     content: str
-    language: Optional[str] = None
+    language: str | None = None
 
 
 class Sample(BaseModel):
@@ -37,7 +38,7 @@ class Sample(BaseModel):
     status: TaskStatus = TaskStatus.IDLE
     progress: int = 0
     created_at: float = Field(default_factory=lambda: datetime.now().timestamp())
-    file_path: Optional[str] = None  # 生成的文件路径
+    file_path: str | None = None  # 生成的文件路径
     artifact: Optional["Artifact"] = None  # 样本的 artifact
 
 
@@ -45,16 +46,16 @@ class Task(BaseModel):
     id: str
     prompt: str
     status: TaskStatus = TaskStatus.IDLE
-    samples: List[Sample] = []
+    samples: list[Sample] = []
     progress: int = 0
     created_at: float = Field(default_factory=lambda: datetime.now().timestamp())
     updated_at: float = Field(default_factory=lambda: datetime.now().timestamp())
-    error: Optional[str] = None
-    artifact: Optional[Artifact] = None
-    options: Dict[str, Any] = {}
+    error: str | None = None
+    artifact: Artifact | None = None
+    options: dict[str, Any] = {}
     pages: str = "auto"  # auto, 5, 10, 15, 20
     output_type: str = "freeform"  # freeform (自由生成)
-    uploaded_file_id: Optional[str] = None  # 上传文件的 ID
+    uploaded_file_id: str | None = None  # 上传文件的 ID
     aspect_ratio: str = "16:9"  # 幻灯片尺寸比例: 16:9, 4:3, A1, A2, A3, A4
 
 
@@ -63,9 +64,9 @@ class CreateTaskRequest(BaseModel):
     sample_count: int = 1
     pages: str = "auto"  # auto, 5, 10, 15, 20
     output_type: str = "freeform"  # freeform (自由生成)
-    uploaded_file_id: Optional[str] = None  # 上传文件的 ID
+    uploaded_file_id: str | None = None  # 上传文件的 ID
     aspect_ratio: str = "16:9"  # 幻灯片尺寸比例: 16:9, 4:3, A1, A2, A3, A4
-    options: Optional[Dict[str, Any]] = None
+    options: dict[str, Any] | None = None
 
 
 class CreateTaskResponse(BaseModel):
@@ -75,6 +76,7 @@ class CreateTaskResponse(BaseModel):
 
 class WebSocketMessage(BaseModel):
     """WebSocket 消息模型，序列化时使用 camelCase"""
+
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
@@ -83,13 +85,13 @@ class WebSocketMessage(BaseModel):
 
     type: str  # status, chunk, complete, error, progress
     task_id: str
-    sample_id: Optional[str] = None
-    content: Optional[str] = None
-    status: Optional[TaskStatus] = None
-    progress: Optional[int] = None
-    error: Optional[str] = None
-    artifact: Optional[Artifact] = None
-    file_path: Optional[str] = None
+    sample_id: str | None = None
+    content: str | None = None
+    status: TaskStatus | None = None
+    progress: int | None = None
+    error: str | None = None
+    artifact: Artifact | None = None
+    file_path: str | None = None
     # 新增字段用于显示 Agent 交互过程
-    role: Optional[str] = None  # system, user, assistant, tool
-    tool_calls: Optional[List[Dict[str, Any]]] = None  # 工具调用信息
+    role: str | None = None  # system, user, assistant, tool
+    tool_calls: list[dict[str, Any]] | None = None  # 工具调用信息

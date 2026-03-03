@@ -5,9 +5,12 @@ DeepPresenter 集成模块
 
 import asyncio
 import json
-import httpx
 from pathlib import Path
-from typing import Optional, Dict, Any, AsyncGenerator
+from typing import Any, Dict, Optional
+from collections.abc import AsyncGenerator
+
+import httpx
+
 from app.core.config import settings
 
 
@@ -36,8 +39,8 @@ class DeepPresenterIntegration:
         self,
         task_id: str,
         prompt: str,
-        options: Optional[Dict[str, Any]] = None,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+        options: dict[str, Any] | None = None,
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """
         生成 PPT（流式返回）
 
@@ -102,17 +105,25 @@ class DeepPresenterIntegration:
                             event_data = self._parse_sse_event(event_str)
                             if event_data:
                                 event_count += 1
-                                event_type = event_data.get('type')
+                                event_type = event_data.get("type")
                                 # 详细日志
-                                if event_type == 'message':
-                                    role = event_data.get('role', 'unknown')
-                                    content_preview = (event_data.get('content', '') or '')[:100]
-                                    tool_calls = event_data.get('tool_calls', [])
-                                    print(f"[DeepPresenter] SSE #{event_count} message: role={role}, content={content_preview}..., tool_calls={len(tool_calls)}")
-                                elif event_type == 'progress':
-                                    print(f"[DeepPresenter] SSE #{event_count} progress: {event_data.get('progress')}%")
+                                if event_type == "message":
+                                    role = event_data.get("role", "unknown")
+                                    content_preview = (
+                                        event_data.get("content", "") or ""
+                                    )[:100]
+                                    tool_calls = event_data.get("tool_calls", [])
+                                    print(
+                                        f"[DeepPresenter] SSE #{event_count} message: role={role}, content={content_preview}..., tool_calls={len(tool_calls)}"
+                                    )
+                                elif event_type == "progress":
+                                    print(
+                                        f"[DeepPresenter] SSE #{event_count} progress: {event_data.get('progress')}%"
+                                    )
                                 else:
-                                    print(f"[DeepPresenter] SSE #{event_count} {event_type}: {event_data}")
+                                    print(
+                                        f"[DeepPresenter] SSE #{event_count} {event_type}: {event_data}"
+                                    )
                                 yield event_data
 
                     # 处理流结束时缓冲区中剩余的数据
@@ -120,10 +131,14 @@ class DeepPresenterIntegration:
                         event_data = self._parse_sse_event(buffer)
                         if event_data:
                             event_count += 1
-                            print(f"[DeepPresenter] Final SSE #{event_count}: {event_data.get('type')}, file_path: {event_data.get('file_path')}")
+                            print(
+                                f"[DeepPresenter] Final SSE #{event_count}: {event_data.get('type')}, file_path: {event_data.get('file_path')}"
+                            )
                             yield event_data
 
-                    print(f"[DeepPresenter] SSE stream ended, total events: {event_count}")
+                    print(
+                        f"[DeepPresenter] SSE stream ended, total events: {event_count}"
+                    )
 
         except httpx.TimeoutException:
             yield {
@@ -138,13 +153,14 @@ class DeepPresenterIntegration:
         except Exception as e:
             print(f"Error in generate_ppt: {e}")
             import traceback
+
             traceback.print_exc()
             yield {
                 "type": "error",
                 "content": str(e),
             }
 
-    def _parse_sse_event(self, event_str: str) -> Optional[Dict[str, Any]]:
+    def _parse_sse_event(self, event_str: str) -> dict[str, Any] | None:
         """解析 SSE 事件字符串"""
         event_type = None
         data = None
@@ -179,8 +195,8 @@ class DeepPresenterIntegration:
         self,
         task_id: str,
         prompt: str,
-        options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         同步生成 PPT（等待完成后返回）
 
@@ -228,20 +244,18 @@ class DeepPresenterIntegration:
                 "error": str(e),
             }
 
-    async def get_task_status(self, task_id: str) -> Dict[str, Any]:
+    async def get_task_status(self, task_id: str) -> dict[str, Any]:
         """获取任务状态"""
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
-                response = await client.get(
-                    f"{self.api_base_url}/api/task/{task_id}"
-                )
+                response = await client.get(f"{self.api_base_url}/api/task/{task_id}")
                 if response.status_code == 200:
                     return response.json()
                 return {"status": "unknown", "error": f"HTTP {response.status_code}"}
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
-    async def upload_file(self, file_path: str) -> Optional[str]:
+    async def upload_file(self, file_path: str) -> str | None:
         """
         上传文件到 DeepPresenter 工作空间
 
@@ -286,6 +300,7 @@ class DeepPresenterIntegration:
             if loop.is_running():
                 # 如果在异步上下文中，创建新任务
                 import concurrent.futures
+
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(asyncio.run, _get_templates())
                     return future.result(timeout=30)

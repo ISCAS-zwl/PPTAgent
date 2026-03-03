@@ -1,6 +1,8 @@
 import json
 from typing import Dict, Set
+
 from fastapi import WebSocket
+
 from app.models.task import WebSocketMessage
 
 
@@ -9,9 +11,9 @@ class ConnectionManager:
 
     def __init__(self):
         # 存储所有活跃的 WebSocket 连接
-        self.active_connections: Set[WebSocket] = set()
+        self.active_connections: set[WebSocket] = set()
         # 存储任务订阅关系 task_id -> set of websockets
-        self.task_subscriptions: Dict[str, Set[WebSocket]] = {}
+        self.task_subscriptions: dict[str, set[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket):
         """接受新的 WebSocket 连接"""
@@ -43,7 +45,9 @@ class ConnectionManager:
     async def send_to_task_subscribers(self, task_id: str, message: WebSocketMessage):
         """向任务的所有订阅者发送消息"""
         subscribers = self.task_subscriptions.get(task_id, set())
-        print(f"[WebSocket] Sending {message.type} to task {task_id[:8]}, subscribers: {len(subscribers)}")
+        print(
+            f"[WebSocket] Sending {message.type} to task {task_id[:8]}, subscribers: {len(subscribers)}"
+        )
 
         if task_id in self.task_subscriptions:
             message_json = message.model_dump_json()

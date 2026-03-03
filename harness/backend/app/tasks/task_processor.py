@@ -1,12 +1,20 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Optional, List, Dict, Any
-from app.models.task import Task, Sample, TaskStatus, WebSocketMessage, Artifact, ArtifactType
+from typing import Any, Dict, List, Optional
+
+from app.core.config import settings
+from app.models.task import (
+    Artifact,
+    ArtifactType,
+    Sample,
+    Task,
+    TaskStatus,
+    WebSocketMessage,
+)
+from app.services.deeppresenter_integration import deeppresenter_integration
 from app.services.task_service import TaskService
 from app.services.websocket_manager import manager
-from app.services.deeppresenter_integration import deeppresenter_integration
-from app.core.config import settings
 
 
 class TaskProcessor:
@@ -42,6 +50,7 @@ class TaskProcessor:
             error_msg = str(e)
             print(f"Error processing task {task.id}: {error_msg}")
             import traceback
+
             traceback.print_exc()
 
             await TaskService.update_task(
@@ -78,10 +87,13 @@ class TaskProcessor:
         # 处理上传的文件
         if task.uploaded_file_id:
             from app.core.config import settings
+
             upload_dir = Path(settings.pptagent_workspace) / "uploads"
             for file_path in upload_dir.glob(f"{task.uploaded_file_id}*"):
                 if file_path.is_file():
-                    remote_path = await deeppresenter_integration.upload_file(str(file_path))
+                    remote_path = await deeppresenter_integration.upload_file(
+                        str(file_path)
+                    )
                     if remote_path:
                         base_options["attachments"].append(remote_path)
                     else:
@@ -96,7 +108,9 @@ class TaskProcessor:
             await TaskProcessor._process_multiple_samples(task, samples, base_options)
 
     @staticmethod
-    async def _process_single_sample(task: Task, sample: Sample, options: Dict[str, Any]):
+    async def _process_single_sample(
+        task: Task, sample: Sample, options: dict[str, Any]
+    ):
         """处理单个样本（原有逻辑）"""
         file_path = None
         token_stats = None
@@ -119,7 +133,11 @@ class TaskProcessor:
                     await TaskService.append_message(
                         task.id,
                         sample.id,
-                        {"content": message_content, "role": event.get("role"), "tool_calls": event.get("tool_calls")}
+                        {
+                            "content": message_content,
+                            "role": event.get("role"),
+                            "tool_calls": event.get("tool_calls"),
+                        },
                     )
                     await manager.send_to_task_subscribers(
                         task.id,
@@ -143,7 +161,10 @@ class TaskProcessor:
                 if slides_dir.exists():
                     slide_files = sorted(slides_dir.glob("slide_*.html"))
                     if slide_files:
-                        slides_info = {"slide_html_dir": str(slides_dir), "html_files": [f.name for f in slide_files]}
+                        slides_info = {
+                            "slide_html_dir": str(slides_dir),
+                            "html_files": [f.name for f in slide_files],
+                        }
                         slides_json = f"```json\n{json.dumps(slides_info, ensure_ascii=False, indent=2)}\n```"
                         content_chunks.append(slides_json)
                         sample.content = "\n\n".join(content_chunks[-20:])
@@ -151,7 +172,7 @@ class TaskProcessor:
                         await TaskService.append_message(
                             task.id,
                             sample.id,
-                            {"content": slides_json, "role": "system"}
+                            {"content": slides_json, "role": "system"},
                         )
                         await manager.send_to_task_subscribers(
                             task.id,
@@ -176,9 +197,12 @@ class TaskProcessor:
                 # 实时扫描并发送已生成的幻灯片列表
                 # 单样本模式：使用 task.id[:8] 作为 shortId（与 DeepPresenter 一致）
                 from datetime import datetime
-                date_str = datetime.now().strftime('%Y%m%d')
+
+                date_str = datetime.now().strftime("%Y%m%d")
                 short_task_id = task.id[:8]
-                workspace_path = Path(settings.pptagent_workspace) / date_str / short_task_id
+                workspace_path = (
+                    Path(settings.pptagent_workspace) / date_str / short_task_id
+                )
                 slides_dir = workspace_path / "slides"
 
                 if slides_dir.exists():
@@ -257,10 +281,15 @@ class TaskProcessor:
             raise Exception("No file generated")
 
     @staticmethod
-    async def _process_multiple_samples(task: Task, samples: List[Sample], base_options: Dict[str, Any]):
+    async def _process_multiple_samples(
+        task: Task, samples: list[Sample], base_options: dict[str, Any]
+    ):
         """并发处理多个样本"""
         import uuid
-        print(f"[TaskProcessor] Processing {len(samples)} samples concurrently for task {task.id}")
+
+        print(
+            f"[TaskProcessor] Processing {len(samples)} samples concurrently for task {task.id}"
+        )
 
         # 发送开始消息
         await manager.send_to_task_subscribers(
@@ -273,7 +302,7 @@ class TaskProcessor:
         )
 
         # 创建并发任务
-        async def process_sample(sample: Sample, sample_index: int) -> Dict[str, Any]:
+        async def process_sample(sample: Sample, sample_index: int) -> dict[str, Any]:
             """处理单个样本的协程"""
             # 使用完全独立的 UUID 作为 task_id，避免 DeepPresenter logger 冲突
             sample_task_id = str(uuid.uuid4())
@@ -285,7 +314,8 @@ class TaskProcessor:
             # 预设 file_path，让前端可以提取短 ID 进行实时预览
             # 格式: workspace/日期/短ID/presentation.pptx
             from datetime import datetime
-            date_str = datetime.now().strftime('%Y%m%d')
+
+            date_str = datetime.now().strftime("%Y%m%d")
             sample.file_path = f"{settings.pptagent_workspace}/{date_str}/{short_task_id}/presentation.pptx"
 
             # 更新样本状态为运行中
@@ -327,7 +357,11 @@ class TaskProcessor:
                             await TaskService.append_message(
                                 task.id,
                                 sample.id,
-                                {"content": message_content, "role": event.get("role"), "tool_calls": event.get("tool_calls")}
+                                {
+                                    "content": message_content,
+                                    "role": event.get("role"),
+                                    "tool_calls": event.get("tool_calls"),
+                                },
                             )
                             # 发送样本特定的消息
                             await manager.send_to_task_subscribers(
@@ -344,7 +378,9 @@ class TaskProcessor:
 
                     elif event_type == "file":
                         file_path = event.get("file_path")
-                        print(f"[TaskProcessor] Sample {sample_index + 1} PPT generated at: {file_path}")
+                        print(
+                            f"[TaskProcessor] Sample {sample_index + 1} PPT generated at: {file_path}"
+                        )
 
                         # 提取 slides 目录路径并发送给前端
                         workspace_path = Path(file_path).parent
@@ -352,7 +388,10 @@ class TaskProcessor:
                         if slides_dir.exists():
                             slide_files = sorted(slides_dir.glob("slide_*.html"))
                             if slide_files:
-                                slides_info = {"slide_html_dir": str(slides_dir), "html_files": [f.name for f in slide_files]}
+                                slides_info = {
+                                    "slide_html_dir": str(slides_dir),
+                                    "html_files": [f.name for f in slide_files],
+                                }
                                 slides_json = f"```json\n{json.dumps(slides_info, ensure_ascii=False, indent=2)}\n```"
                                 content_chunks.append(slides_json)
                                 sample.content = "\n\n".join(content_chunks[-20:])
@@ -360,7 +399,7 @@ class TaskProcessor:
                                 await TaskService.append_message(
                                     task.id,
                                     sample.id,
-                                    {"content": slides_json, "role": "system"}
+                                    {"content": slides_json, "role": "system"},
                                 )
                                 await manager.send_to_task_subscribers(
                                     task.id,
@@ -483,12 +522,16 @@ class TaskProcessor:
             task_artifact = first_success.artifact
 
             updated_options = task.options.copy()
-            updated_options["generated_file_paths"] = [s.file_path for s in successful_samples if s.file_path]
+            updated_options["generated_file_paths"] = [
+                s.file_path for s in successful_samples if s.file_path
+            ]
             updated_options["token_stats"] = all_token_stats
             updated_options["successful_count"] = len(successful_samples)
             updated_options["failed_count"] = len(failed_samples)
 
-            final_status = TaskStatus.COMPLETED if not failed_samples else TaskStatus.COMPLETED
+            final_status = (
+                TaskStatus.COMPLETED if not failed_samples else TaskStatus.COMPLETED
+            )
 
             await TaskService.update_task(
                 task.id,
@@ -539,7 +582,7 @@ class TaskProcessor:
             )
 
     @staticmethod
-    def _format_message(event: Dict[str, Any]) -> str:
+    def _format_message(event: dict[str, Any]) -> str:
         """格式化消息内容"""
         role = event.get("role", "assistant")
         content = event.get("content", "")
@@ -567,18 +610,30 @@ class TaskProcessor:
 
         if tool_calls:
             for tc in tool_calls:
-                tool_name = tc.get('name', 'unknown')
-                tool_args = tc.get('arguments', '')
+                tool_name = tc.get("name", "unknown")
+                tool_args = tc.get("arguments", "")
                 message_parts.append(f"🔧 **Tool Call: {tool_name}**")
                 if tool_args:
                     try:
                         import json
+
                         args_dict = json.loads(tool_args)
                         if len(tool_args) < 300:
-                            message_parts.append(f"```json\n{json.dumps(args_dict, ensure_ascii=False, indent=2)}\n```")
+                            message_parts.append(
+                                f"```json\n{json.dumps(args_dict, ensure_ascii=False, indent=2)}\n```"
+                            )
                         else:
-                            summary = {k: (v[:50] + "..." if isinstance(v, str) and len(v) > 50 else v) for k, v in args_dict.items()}
-                            message_parts.append(f"```json\n{json.dumps(summary, ensure_ascii=False, indent=2)}\n```")
+                            summary = {
+                                k: (
+                                    v[:50] + "..."
+                                    if isinstance(v, str) and len(v) > 50
+                                    else v
+                                )
+                                for k, v in args_dict.items()
+                            }
+                            message_parts.append(
+                                f"```json\n{json.dumps(summary, ensure_ascii=False, indent=2)}\n```"
+                            )
                     except:
                         if len(tool_args) < 300:
                             message_parts.append(f"```\n{tool_args}\n```")
@@ -677,6 +732,7 @@ async def task_worker():
         except Exception as e:
             print(f"Error in task worker: {e}")
             import traceback
+
             traceback.print_exc()
 
 
