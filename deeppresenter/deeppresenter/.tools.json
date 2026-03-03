@@ -1,5 +1,14 @@
 {
   "server_tools": {
+    "sandbox": [
+      "read_file",
+      "write_file",
+      "move_file",
+      "edit_file",
+      "create_directory",
+      "list_directory",
+      "execute_command"
+    ],
     "research": [
       "search_papers",
       "get_paper_authors",
@@ -11,17 +20,10 @@
       "fetch_url",
       "download_file"
     ],
-    "any2markdown": [
-      "convert_to_markdown"
-    ],
-    "sandbox": [
-      "read_file",
-      "write_file",
-      "move_file",
-      "edit_file",
-      "create_directory",
-      "list_directory",
-      "execute_command"
+    "tool_agents": [
+      "image_generation",
+      "image_caption",
+      "document_summary"
     ],
     "task": [
       "todo_create",
@@ -30,10 +32,8 @@
       "thinking",
       "finalize"
     ],
-    "tool_agents": [
-      "image_generation",
-      "image_caption",
-      "document_summary"
+    "any2markdown": [
+      "convert_to_markdown"
     ],
     "deeppresenter": [
       "inspect_slide",
@@ -41,6 +41,185 @@
     ]
   },
   "tool_specs": [
+    {
+      "type": "function",
+      "function": {
+        "name": "read_file",
+        "description": "\n                        Read contents of a text file with optional line range.\n\n                        Parameters:\n                        - 'offset': Starting line (default: 0, 0-indexed)\n                        * Positive N: Start from line N\n                        * Negative N: Start N lines from end (e.g., -20 = last 20 lines)\n                        - 'length': Max lines to read (default: all remaining lines)\n\n                        Examples:\n                        - (no params)             → Read entire file\n                        - offset: 0, length: 10   → Lines 0-9 (first 10 lines)\n                        - offset: 100, length: 5  → Lines 100-104\n                        - offset: -20             → Last 20 lines\n                    ",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "offset": {
+              "type": "number",
+              "default": 0
+            },
+            "length": {
+              "type": "number",
+              "default": 1000
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "write_file",
+        "description": "\n                        Write or append to file contents",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "rewrite",
+                "append"
+              ],
+              "default": "rewrite"
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_file",
+        "description": "\n                        Move or rename files and directories.\n                        Can move files between directories and rename them in a single operation",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string"
+            },
+            "destination": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "destination"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "edit_file",
+        "description": "\n                        Apply surgical text replacements to files.\n\n                        Parameters:\n                        - file_path: Path to the file to edit\n                        - old_string: Text to replace\n                        - new_string: Replacement text\n                        - expected_replacements: Optional parameter for number of replacements\n\n                        By default, replaces only ONE occurrence of the search text.\n                        To replace multiple occurrences, provide the expected_replacements parameter with\n                        the exact number of matches expected.\n\n                        When a close but non-exact match is found, a character-level diff is shown in the format:\n                        common_prefix{-removed-}{+added+}common_suffix to help you identify what's different",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "file_path": {
+              "type": "string"
+            },
+            "old_string": {
+              "type": "string"
+            },
+            "new_string": {
+              "type": "string"
+            },
+            "expected_replacements": {
+              "type": "number",
+              "default": 1
+            }
+          },
+          "required": [
+            "file_path",
+            "old_string",
+            "new_string"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "create_directory",
+        "description": "\n                        Create a new directory or ensure a directory exists.\n                        Can create multiple nested directories in one operation",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_directory",
+        "description": "\n                        Get a detailed listing of all files and directories in a specified path.\n                        Results distinguish between files and directories with [FILE] and [DIR] prefixes",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "number",
+              "default": 2
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "execute_command",
+        "description": "\n                        Execute a terminal command",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "The command to execute"
+            }
+          },
+          "required": [
+            "command"
+          ]
+        }
+      }
+    },
     {
       "type": "function",
       "function": {
@@ -227,20 +406,28 @@
     {
       "type": "function",
       "function": {
-        "name": "convert_to_markdown",
-        "description": "Convert a file to markdown, it could accept pdf, docx, doc, etc.\nArgs:\n    file_path: The path of the file to be converted\n    output_folder: The folder to save the converted markdown and images, should be empty or not exist\n\nReturns:\n    The converted results, with file saved to the specified path",
+        "name": "image_generation",
+        "description": "Generate an image and save it to the specified path.\n\nArgs:\n    prompt: Text description of the image to generate. Should be detailed and specific, but do not include aspect ratio.\n    width: Width of the image, in pixels\n    height: Height of the image, in pixels\n    path: Full path where the image should be saved",
         "parameters": {
           "properties": {
-            "file_path": {
+            "prompt": {
               "type": "string"
             },
-            "output_folder": {
+            "width": {
+              "type": "integer"
+            },
+            "height": {
+              "type": "integer"
+            },
+            "path": {
               "type": "string"
             }
           },
           "required": [
-            "file_path",
-            "output_folder"
+            "prompt",
+            "width",
+            "height",
+            "path"
           ],
           "type": "object"
         }
@@ -249,179 +436,40 @@
     {
       "type": "function",
       "function": {
-        "name": "read_file",
-        "description": "\n                        Read contents of a text file with optional line range.\n\n                        Parameters:\n                        - 'offset': Starting line (default: 0, 0-indexed)\n                        * Positive N: Start from line N\n                        * Negative N: Start N lines from end (e.g., -20 = last 20 lines)\n                        - 'length': Max lines to read (default: all remaining lines)\n\n                        Examples:\n                        - (no params)             → Read entire file\n                        - offset: 0, length: 10   → Lines 0-9 (first 10 lines)\n                        - offset: 100, length: 5  → Lines 100-104\n                        - offset: -20             → Last 20 lines\n                    ",
+        "name": "image_caption",
+        "description": "Generate a caption for the image, including its type and a brief description.\n\nArgs:\n    image_path: The path to the image to caption.\n\nReturns:\n    The caption and size for the image",
         "parameters": {
-          "type": "object",
           "properties": {
-            "path": {
+            "image_path": {
               "type": "string"
-            },
-            "offset": {
-              "type": "number",
-              "default": 0
-            },
-            "length": {
-              "type": "number",
-              "default": 1000
             }
           },
           "required": [
-            "path"
+            "image_path"
           ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "type": "object"
         }
       }
     },
     {
       "type": "function",
       "function": {
-        "name": "write_file",
-        "description": "\n                        Write or append to file contents",
+        "name": "document_summary",
+        "description": "Generate a report according to the given task and long document.\n\nArgs:\n    task: The specific task or objective for the report\n    document_path: Path to the pure text document to be analyzed.\n\nReturns:\n    A structured summary report in Markdown format based on the task and document content",
         "parameters": {
-          "type": "object",
           "properties": {
-            "path": {
+            "task": {
               "type": "string"
             },
-            "content": {
+            "document_path": {
               "type": "string"
-            },
-            "mode": {
-              "type": "string",
-              "enum": [
-                "rewrite",
-                "append"
-              ],
-              "default": "rewrite"
             }
           },
           "required": [
-            "path",
-            "content"
+            "task",
+            "document_path"
           ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "move_file",
-        "description": "\n                        Move or rename files and directories.\n                        Can move files between directories and rename them in a single operation",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "source": {
-              "type": "string"
-            },
-            "destination": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "source",
-            "destination"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "edit_file",
-        "description": "\n                        Apply surgical text replacements to files.\n\n                        Parameters:\n                        - file_path: Path to the file to edit\n                        - old_string: Text to replace\n                        - new_string: Replacement text\n                        - expected_replacements: Optional parameter for number of replacements\n\n                        By default, replaces only ONE occurrence of the search text.\n                        To replace multiple occurrences, provide the expected_replacements parameter with\n                        the exact number of matches expected.\n\n                        When a close but non-exact match is found, a character-level diff is shown in the format:\n                        common_prefix{-removed-}{+added+}common_suffix to help you identify what's different",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "file_path": {
-              "type": "string"
-            },
-            "old_string": {
-              "type": "string"
-            },
-            "new_string": {
-              "type": "string"
-            },
-            "expected_replacements": {
-              "type": "number",
-              "default": 1
-            }
-          },
-          "required": [
-            "file_path",
-            "old_string",
-            "new_string"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "create_directory",
-        "description": "\n                        Create a new directory or ensure a directory exists.\n                        Can create multiple nested directories in one operation",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "path"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "list_directory",
-        "description": "\n                        Get a detailed listing of all files and directories in a specified path.\n                        Results distinguish between files and directories with [FILE] and [DIR] prefixes",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string"
-            },
-            "depth": {
-              "type": "number",
-              "default": 2
-            }
-          },
-          "required": [
-            "path"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "execute_command",
-        "description": "\n                        Execute a terminal command",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "command": {
-              "type": "string",
-              "description": "The command to execute"
-            }
-          },
-          "required": [
-            "command"
-          ]
+          "type": "object"
         }
       }
     },
@@ -524,68 +572,20 @@
     {
       "type": "function",
       "function": {
-        "name": "image_generation",
-        "description": "Generate an image and save it to the specified path.\n\nArgs:\n    prompt: Text description of the image to generate. Should be detailed and specific, but do not include aspect ratio.\n    width: Width of the image, in pixels\n    height: Height of the image, in pixels\n    path: Full path where the image should be saved",
+        "name": "convert_to_markdown",
+        "description": "Convert a file to markdown, it could accept pdf, docx, doc, etc.\nArgs:\n    file_path: The path of the file to be converted\n    output_folder: The folder to save the converted markdown and images, should be empty or not exist\n\nReturns:\n    The converted results, with file saved to the specified path",
         "parameters": {
           "properties": {
-            "prompt": {
+            "file_path": {
               "type": "string"
             },
-            "width": {
-              "type": "integer"
-            },
-            "height": {
-              "type": "integer"
-            },
-            "path": {
+            "output_folder": {
               "type": "string"
             }
           },
           "required": [
-            "prompt",
-            "width",
-            "height",
-            "path"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "image_caption",
-        "description": "Generate a caption for the image, including its type and a brief description.\n\nArgs:\n    image_path: The path to the image to caption.\n\nReturns:\n    The caption and size for the image",
-        "parameters": {
-          "properties": {
-            "image_path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "image_path"
-          ],
-          "type": "object"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "document_summary",
-        "description": "Generate a report according to the given task and long document.\n\nArgs:\n    task: The specific task or objective for the report\n    document_path: Path to the pure text document to be analyzed.\n\nReturns:\n    A structured summary report in Markdown format based on the task and document content",
-        "parameters": {
-          "properties": {
-            "task": {
-              "type": "string"
-            },
-            "document_path": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "task",
-            "document_path"
+            "file_path",
+            "output_folder"
           ],
           "type": "object"
         }

@@ -107,6 +107,7 @@ async def generate_ppt_stream(task_id: str, request: GenerateRequest):
             num_pages=request.num_pages,
             template=request.template if request.template != "auto" else None,
             convert_type=get_convert_type(request.convert_type),
+            powerpoint_type=request.powerpoint_type,
         )
 
         # 保存文件路径，在循环结束后发送 complete 事件
@@ -386,6 +387,7 @@ async def generate_ppt_sync(request: GenerateRequest) -> TaskStatusResponse:
             num_pages=request.num_pages,
             template=request.template if request.template != "auto" else None,
             convert_type=get_convert_type(request.convert_type),
+            powerpoint_type=request.powerpoint_type,
         )
 
         file_path = None

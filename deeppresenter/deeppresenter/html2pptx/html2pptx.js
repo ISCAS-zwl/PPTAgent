@@ -2644,6 +2644,35 @@ async function html2pptx(htmlFile, pres, options = {}) {
       if (src.startsWith('data:')) return null;
       if (src.startsWith('http://') || src.startsWith('https://')) return null;
       if (src.startsWith('file://')) return src.replace('file://', '');
+
+      // Handle API preview paths: /api/preview/asset/{task_id}/{relative_path}
+      // Convert them back to local file paths
+      if (src.startsWith('/api/preview/asset/')) {
+        const match = src.match(/^\/api\/preview\/asset\/([^/]+)\/(.+)$/);
+        if (match) {
+          const taskId = match[1];
+          const relativePath = match[2];
+          // Try to find the workspace directory containing this task
+          const htmlDir = path.dirname(filePath);
+          // The HTML file is typically in workspace/{date}/{task_id}/slides/
+          // So we go up one level to get to the task directory
+          const taskDir = path.dirname(htmlDir);
+          const resolvedPath = path.join(taskDir, relativePath);
+          if (fs.existsSync(resolvedPath)) {
+            return resolvedPath;
+          }
+          // Fallback: try to construct from workspace root
+          const workspaceMatch = filePath.match(/(.+\/workspace\/[^/]+\/[^/]+)\//);
+          if (workspaceMatch) {
+            const taskRoot = workspaceMatch[1];
+            const fallbackPath = path.join(taskRoot, relativePath);
+            if (fs.existsSync(fallbackPath)) {
+              return fallbackPath;
+            }
+          }
+        }
+      }
+
       if (path.isAbsolute(src)) return src;
       return path.join(path.dirname(filePath), src);
     };

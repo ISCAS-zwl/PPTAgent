@@ -18,7 +18,14 @@ from deeppresenter.utils.webview import convert_html_to_pptx
 
 mcp = FastMCP("DeepPresenter")
 CONFIG = DeepPresenterConfig.load_from_file(os.getenv("CONFIG_FILE"))
-LID_MODEL = _get_lid_model()
+LID_MODEL = None
+
+
+def _get_cached_lid_model():
+    global LID_MODEL
+    if LID_MODEL is None:
+        LID_MODEL = _get_lid_model()
+    return LID_MODEL
 
 
 @mcp.tool()
@@ -79,7 +86,8 @@ def inspect_manuscript(md_file: str) -> dict:
     pages = [p for p in markdown.split("\n---\n") if p.strip()]
     result = defaultdict(list)
     result["num_pages"] = len(pages)
-    label = LID_MODEL.predict(markdown[:1000].replace("\n", " "))
+    lid_model = _get_cached_lid_model()
+    label = lid_model.predict(markdown[:1000].replace("\n", " "))
     result["language"] = label[0][0].replace("__label__", "")
 
     seen_images = set()
